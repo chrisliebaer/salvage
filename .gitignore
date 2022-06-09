@@ -1,0 +1,9 @@
+# gradle related
+/.gradle
+/build/
+/out/
+
+# development
+/.idea
+/dev/
+/docker-compose.yml

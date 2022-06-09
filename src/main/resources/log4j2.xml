@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN" shutdownHook="disable">
+	<Appenders>
+		<Console name="Console" target="SYSTEM_OUT">
+			<PatternLayout
+					pattern="%highlight{[%d{HH:mm:ss]}[%p{length=3}][%c{1}] %m%n}{FATAL=black, ERROR=red, WARN=yellow, INFO=green, DEBUG=blue, TRACE=white}"
+					disableAnsi="false"/>
+		</Console>
+	</Appenders>
+	<Loggers>
+		<Logger name="org.apache.hc" level="INFO"/>
+		<Logger name="com.github.dockerjava" level="INFO"/>
+		
+		<Root level="TRACE">
+			<AppenderRef ref="Console"/>
+		</Root>
+	</Loggers>
+</Configuration>
