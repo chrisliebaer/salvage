@@ -3,12 +3,6 @@ package de.chrisliebaer.salvage;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.Service;
 import lombok.extern.log4j.Log4j2;
-import org.apache.commons.io.FileUtils;
-
-import java.io.File;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.regex.Pattern;
 
 /*
 Kommunikation mit crane über socket im container
@@ -50,9 +44,6 @@ irgendwas
 public enum SalvageMain {
 	;
 	
-	private static final Pattern CONTAINER_ID_IN_CPUSET_PATTERN = Pattern.compile("^/system\\.slice/docker-(?<id>[a-f\\d]+)\\.scope");
-	private static final File CPUSET_FILE = new File("/proc/1/cpuset");
-	
 	public static void main(String[] args) {
 		
 		var service = new SalvageService();
@@ -91,25 +82,5 @@ public enum SalvageMain {
 			log.info("termination signal received, stopping salvage service, please wait...");
 			service.stopAsync().awaitTerminated();
 		}, "SalvageShutdownHook"));
-	}
-	
-	/**
-	 * Undocumented and hacky method to get own container id. May break at any point.
-	 *
-	 * @return The container id of the container this application is currently running in.
-	 * @throws IllegalStateException If fetching the container id failed.
-	 */
-	public static String getOwnContainerId() {
-		try {
-			var cpuset = FileUtils.readFileToString(new File("/proc/1/cpuset"), StandardCharsets.UTF_8);
-			var matcher = CONTAINER_ID_IN_CPUSET_PATTERN.matcher(cpuset);
-			if (matcher.find()) {
-				return matcher.group("id");
-			}
-			
-			throw new IllegalStateException("failed to fetch own container id from " + CPUSET_FILE + ". Content was: " + cpuset);
-		} catch (IOException e) {
-			throw new IllegalStateException("failed to read " + CPUSET_FILE, e);
-		}
 	}
 }

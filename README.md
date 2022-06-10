@@ -1,4 +1,4 @@
-# WARNING: Work in progress! Very instable, not ready for anything larger than a calculator.
+# WARNING: Work in progress! Very unstable, not ready for anything larger than a calculator.
 
 salvage is my solution for backing up small scale Docker applications.
 Or more specifically: **my** Docker infrastructure.
@@ -35,6 +35,8 @@ This might seem odd at first, but since the configuration of other containers an
 The following environment variables are used to configure the daemon:
 
 * `MACHINE`: Name that will be passed to cranes to identify the current machine. This can be used to differentiate between different machines on the same storage.
+
+Additionaly, the following label must be set on the salvage container in order for it to find itself: `salvage.root`.
 
 ### Tide configuration
 

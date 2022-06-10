@@ -32,10 +32,12 @@ public class SalvageService extends AbstractService {
 	
 	public static final String SALVAGE_ENTITY_LABEL = "salvage.entity";
 	
+	private static final String ROOT_LABEL = "salvage.root";
 	private static final String LABEL_VOLUME_TIDE_NAME = "salvage.tide";
 	
 	private SalvageConfiguration configuration;
 	private final Thread serviceThread = new Thread(this::serviceThreadEntry, "SalvageService");
+	private String ownContainerId;
 	
 	@Override
 	protected void doStart() {
@@ -53,7 +55,7 @@ public class SalvageService extends AbstractService {
 			
 			cleanupLeftOver(docker);
 			
-			var ownContainerId = SalvageMain.getOwnContainerId();
+			ownContainerId = getOwnContainerId(docker);
 			InspectContainerResponse ownContainer;
 			log.info("found own container id as {}", ownContainerId);
 			try {
@@ -160,7 +162,7 @@ public class SalvageService extends AbstractService {
 					.collect(Collectors.toList());
 			
 			// remove ourself, since we never want to touch our own container (only happens if user is actually stupid)
-			containers.removeIf(c -> c.id().equals(SalvageMain.getOwnContainerId()));
+			containers.removeIf(c -> c.id().equals(ownContainerId));
 			
 			log.info("found {} containers depending on tide '{}'", containers.size(), tide.name());
 			if (log.isDebugEnabled()) {
@@ -307,5 +309,28 @@ public class SalvageService extends AbstractService {
 						.exec();
 			}
 		}
+	}
+	
+	/**
+	 * Calls docker API to get own container ID.
+	 *
+	 * @param docker the docker connection.
+	 * @return The container id of the container this application is currently running in.
+	 * @throws IllegalStateException If fetching the container id failed.
+	 */
+	public static String getOwnContainerId(DockerClient docker) {
+		
+		// we also check of stopped container since there is no situation where these are a good idea
+		var containers = docker.listContainersCmd()
+				.withShowAll(true)
+				.withLabelFilter(List.of(ROOT_LABEL))
+				.exec();
+		
+		if (containers.isEmpty())
+			throw new IllegalStateException("no container with label '" + ROOT_LABEL + "' found");
+		if (containers.size() > 1)
+			throw new IllegalStateException("multiple containers with label '" + ROOT_LABEL + "' found, check if you have older containers existing");
+		
+		return containers.get(0).getId();
 	}
 }
