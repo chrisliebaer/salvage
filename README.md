@@ -75,18 +75,6 @@ Salvage offers two ways of resolving the volume name:
 * `compose project scope`: The volume name is the same as the name of the volume in the compose project (resolved via docker compose labels on volume).
 * `global scope`: If volume name is prefixed with `g:` it will be resolved by the given name.
 
-### Mapping global volumes
-
-This approach is used when a volume is not managed by compose.
-
-#### Mapping compose volumes
-
-Imagine you have a volume section in a `docker-compose.yml` like so the following `my-volume`.
-```yaml
-volumes:
-  - my-volume
-```
-
 ### Container configuration
 
 The following labels can be used on containers and will define how Salvage will tell the container to stop modifying the backup volume.
