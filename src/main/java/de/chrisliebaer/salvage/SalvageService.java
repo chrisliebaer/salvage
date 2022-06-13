@@ -328,11 +328,11 @@ public class SalvageService extends AbstractService {
 		for (var container : containers) {
 			var labels = container.getLabels();
 			var volumeNames = labels.get(tideLabel).split(",");
-			log.trace("container '{}' is mapped to tide '{}' via labels: {}", container.getId(), tide.name(), volumeNames);
+			log.trace("container '{}' is mapping volumes to tide '{}' via labels: {}", container.getId(), tide.name(), volumeNames);
 			
 			var project = labels.get(COMPOSE_LABEL_PROJECT);
 			if (project == null) {
-				log.warn("container {} is not part of a project, only project containers can be used for volume mapping", container.getId());
+				log.warn("container '{}' is not part of a project, only project containers can be used for volume mapping", container.getId());
 				continue;
 			}
 			
@@ -340,15 +340,15 @@ public class SalvageService extends AbstractService {
 				InspectVolumeResponse volume;
 				if (volumeName.startsWith("g:")) {
 					// perform global lookup using raw volume name
-					volumeName = volumeName.substring(2);
-					volume = docker.inspectVolumeCmd(volumeName).exec();
+					var globalName = volumeName.substring(2);
+					volume = docker.inspectVolumeCmd(globalName).exec();
 				} else {
+					log.trace("performing lookup volume '{}' in compose project '{}'", volumeName, project);
 					var volumes = docker.listVolumesCmd()
 							.withFilter("label", List.of(
-									COMPOSE_LABEL_PROJECT + ":" + project,
-									COMPOSE_LABEL_VOLUME + ":" + volumeName
+									COMPOSE_LABEL_PROJECT + "=" + project,
+									COMPOSE_LABEL_VOLUME + "=" + volumeName
 							))
-							.withDanglingFilter(true) // true will fetch ALL volumes
 							.exec().getVolumes();
 					
 					if (volumes.size() != 1) {
@@ -357,6 +357,8 @@ public class SalvageService extends AbstractService {
 					
 					volume = volumes.get(0);
 				}
+				
+				log.trace("successfully identified volume '{}' as docker volume '{}'", volumeName, volume.getName());
 				
 				map.put(volume.getName(), SalvageVolume.fromInspectVolumeResponse(volume));
 			}

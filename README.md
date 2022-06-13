@@ -64,15 +64,28 @@ The following labels are used to configure a crane and need to present on the sa
 * `salvage.cranes.<name>.env.<key>`: Environment variables to pass to the crane. For example `salvage.cranes.<name>.env.S3_BUCKET=my-bucket`.
 * `salvage.cranes.<name>.mount.<volume>`: Mounts a volume to the crane. The volume will be mounted at the specified path. For exmaples `salvage.cranes.<name>.mount.my-volume=/cache`.
 
-## Volume configuration
+### Volume configuration
 
 By default, Salvage will ignore all volumes it hasn't been explicitly instructed to backup.
 In order to configure a volume for backup, you need to label it as such.
-While executing a Tide, salvage will check for the following labels on each volume:
+Since changing labels on volumes is not supported by Docker, volumes are configured by attaching labels to containers instead (see FAQ).
+To do this, place the `salvage.tide.<name>=<volume1>,<volume2>,...` label on any container (it doesn't need to actually use the volume).
+Salvage offers two ways of resolving the volume name:
 
-* `salvage.tide`: The name of the Tide this volume is attached to.
-* `salvage.crane`: Override the default crane to use for this volume.
-* `salvage.dryRun`: If set to `true`, the volume will not be backed up, but all preparations will be done and a status message is logged instead.
+* `compose project scope`: The volume name is the same as the name of the volume in the compose project (resolved via docker compose labels on volume).
+* `global scope`: If volume name is prefixed with `g:` it will be resolved by the given name.
+
+### Mapping global volumes
+
+This approach is used when a volume is not managed by compose.
+
+#### Mapping compose volumes
+
+Imagine you have a volume section in a `docker-compose.yml` like so the following `my-volume`.
+```yaml
+volumes:
+  - my-volume
+```
 
 ### Container configuration
 

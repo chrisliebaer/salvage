@@ -119,7 +119,7 @@ public class SalvageVessel {
 				.withFollowStream(true)
 				.exec(new FrameCallback(frame -> {
 					var line = new String(frame.getPayload(), StandardCharsets.UTF_8).trim();
-					log.debug("[{}}@{}] {}", volume.name(), crane.name(), line);
+					log.debug("[{}@{}] {}", volume.name(), crane.name(), line);
 				}));
 		log.trace("starting backup container '{}' for volume '{}'", container.getId(), volume.name());
 		docker.startContainerCmd(container.getId()).exec();
