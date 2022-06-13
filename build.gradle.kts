@@ -4,7 +4,7 @@ plugins {
 	idea
 	id("com.palantir.git-version") version "0.12.3"
 	id("io.freefair.lombok") version "6.3.0"
-	id("com.google.cloud.tools.jib") version "3.1.4"
+	id("com.google.cloud.tools.jib") version "3.2.1"
 }
 
 idea {
@@ -31,20 +31,6 @@ application {
 jib {
 	val javaVersion = java.toolchain.languageVersion.get().asInt()
 	from.image = "eclipse-temurin:$javaVersion"
-	
-	container {
-		//jvmFlags = mutableListOf("-agentlib:jdwp=transport=dt_socket,server=n,address=192.168.200.1:5005,suspend=y")
-	}
-	
-	to {
-		
-		// here be dragons
-		System.getenv("IMAGE_TAGS")?.apply {
-			tags = split("[,\\n]".toRegex())
-					.map { it.split(":")[1] }
-					.toCollection(mutableSetOf())
-		}
-	}
 }
 
 repositories {
