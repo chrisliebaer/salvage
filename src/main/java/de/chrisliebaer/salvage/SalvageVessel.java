@@ -82,6 +82,7 @@ public class SalvageVessel {
 		log.debug("created container '{}' for crane '{}' to backup volume '{}'", container.getId(), crane, volume);
 		
 		try {
+			// TODO remove autoremove and simple remove container by hand, will get rid of many bugs
 			startBackupContainer(container);
 		} catch (Throwable e) {
 			// at this point container has been created but might not have been auto removed, so we try to remove it in an attempt to clean up

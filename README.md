@@ -118,3 +118,13 @@ If you think that's a good idea go ahead and do it.
 
 No! salvage assumes to be the only instance running on a docker daemon.
 If you run multiple instances, they will start to interfere with each other.
+
+## Why not use volume labels to configure backup volumes?
+
+Docker does not allow to modify volume labels.
+This means in order to (re)configure a volume for backup, you need to remove the volume and recreate it, which also means losing all data that is currently stored in the volume.
+Backup configuration should not require risky volume operations.
+
+## Can I attach a volume to multiple Tides?
+
+This sounds like a horrible idea, but it is possible.

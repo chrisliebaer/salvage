@@ -4,41 +4,6 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.Service;
 import lombok.extern.log4j.Log4j2;
 
-/*
-Kommunikation mit crane über socket im container
-
-0. Nach Start eigene Umgebung erfassen
-1. Auf nächste Tide warten
-2. Volumes identifizieren, die von Tide gesichert werden müssen
-außerdem: individual, smart, project (steuert gruppierung)
-3b. Nachfolgende Aktionen für jede dieser Komponenten ausführen
-
-4. Checkpoint: Volumes befinden sich in Backup State
-5. crane config laden (wird über envvars in salvage konfiguriert)
-	* image name
-	* env vars
-	* volume mounts
-6. crane parellel auf alle volumes ausführen (parellel, wenn von crane erlaubt)
-6.a crane meldet status irgendwie zurück
-
-7. Container state wiederherstellen
-8. Tide complete
-
-Beispiel für mich:
-hetzner-borg-crane:
-- image chrisliebaer/crane-borg
-- keine Volumes
-- ENV: secret login
-
-daily-backup-tide:
-- 4 uhr nachts
-
-volumes:
-irgendwas
-- tide: daily-backups
-- crane: hetzner-borg-crane
- */
-
 @SuppressWarnings("CallToSystemExit")
 @Log4j2
 public enum SalvageMain {
