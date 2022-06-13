@@ -3,6 +3,7 @@ package de.chrisliebaer.salvage;
 import com.cronutils.model.time.ExecutionTime;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.InspectContainerResponse;
+import com.github.dockerjava.api.command.InspectVolumeResponse;
 import com.github.dockerjava.api.command.PullImageResultCallback;
 import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.core.DefaultDockerClientConfig;
@@ -23,7 +24,9 @@ import org.apache.logging.log4j.ThreadContext;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.ZonedDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -31,9 +34,11 @@ import java.util.stream.Collectors;
 public class SalvageService extends AbstractService {
 	
 	public static final String SALVAGE_ENTITY_LABEL = "salvage.entity";
+	public static final String COMPOSE_LABEL_PROJECT = "com.docker.compose.project";
+	private static final String COMPOSE_LABEL_VOLUME = "com.docker.compose.volume";
 	
 	private static final String ROOT_LABEL = "salvage.root";
-	private static final String LABEL_VOLUME_TIDE_NAME = "salvage.tide";
+	private static final String LABEL_CONTAINER_TIDE_MAP_PREFIX = "salvage.tide.";
 	
 	private SalvageConfiguration configuration;
 	private final Thread serviceThread = new Thread(this::serviceThreadEntry, "SalvageService");
@@ -141,11 +146,9 @@ public class SalvageService extends AbstractService {
 		try (var docker = createDefaultClient()) {
 			docker.pingCmd().exec();
 			
-			// identify volumes belonging to this tide
-			var volumes = docker.listVolumesCmd()
-					.withFilter("label", List.of(LABEL_VOLUME_TIDE_NAME + "=" + tide.name())).exec().getVolumes().stream()
-					.map(v -> SalvageVolume.fromInspectVolumeResponse(v, configuration.cranes()))
-					.collect(Collectors.toMap(SalvageVolume::name, v -> v));
+			// identifying volumes of tide is rather complicated and involes different logic, depending on wether the volume is part of a project or not
+			var volumes = getVolumeNamesForTide(docker, tide);
+			
 			
 			log.info("found {} volumes belonging to tide '{}'", volumes.size(), tide.name());
 			if (log.isDebugEnabled()) {
@@ -311,6 +314,58 @@ public class SalvageService extends AbstractService {
 		}
 	}
 	
+	private static Map<String, SalvageVolume> getVolumeNamesForTide(DockerClient docker, SalvageTide tide) {
+		var tideLabel = LABEL_CONTAINER_TIDE_MAP_PREFIX + tide.name();
+		var map = new HashMap<String, SalvageVolume>();
+		
+		// check for volumes that are mapped to tide via container labels
+		var containers = docker.listContainersCmd()
+				.withLabelFilter(List.of(tideLabel))
+				.withShowAll(true)
+				.exec();
+		
+		// resolve volume names in respect to container compose project
+		for (var container : containers) {
+			var labels = container.getLabels();
+			var volumeNames = labels.get(tideLabel).split(",");
+			log.trace("container '{}' is mapping volumes to tide '{}' via labels: {}", container.getId(), tide.name(), volumeNames);
+			
+			var project = labels.get(COMPOSE_LABEL_PROJECT);
+			if (project == null) {
+				log.warn("container '{}' is not part of a project, only project containers can be used for volume mapping", container.getId());
+				continue;
+			}
+			
+			for (var volumeName : volumeNames) {
+				InspectVolumeResponse volume;
+				if (volumeName.startsWith("g:")) {
+					// perform global lookup using raw volume name
+					var globalName = volumeName.substring(2);
+					volume = docker.inspectVolumeCmd(globalName).exec();
+				} else {
+					log.trace("performing lookup volume '{}' in compose project '{}'", volumeName, project);
+					var volumes = docker.listVolumesCmd()
+							.withFilter("label", List.of(
+									COMPOSE_LABEL_PROJECT + "=" + project,
+									COMPOSE_LABEL_VOLUME + "=" + volumeName
+							))
+							.exec().getVolumes();
+					
+					if (volumes.size() != 1) {
+						throw new IllegalArgumentException("expected exactly one volume in project '" + project + "' named '" + volumeName + "' but found " + volumes.size());
+					}
+					
+					volume = volumes.get(0);
+				}
+				
+				log.trace("successfully identified volume '{}' as docker volume '{}'", volumeName, volume.getName());
+				
+				map.put(volume.getName(), SalvageVolume.fromInspectVolumeResponse(volume));
+			}
+		}
+		return map;
+	}
+	
 	/**
 	 * Calls docker API to get own container ID.
 	 *
@@ -318,7 +373,7 @@ public class SalvageService extends AbstractService {
 	 * @return The container id of the container this application is currently running in.
 	 * @throws IllegalStateException If fetching the container id failed.
 	 */
-	public static String getOwnContainerId(DockerClient docker) {
+	private static String getOwnContainerId(DockerClient docker) {
 		
 		// we also check of stopped container since there is no situation where these are a good idea
 		var containers = docker.listContainersCmd()

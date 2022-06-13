@@ -1,6 +1,7 @@
 package de.chrisliebaer.salvage.entity;
 
 import com.github.dockerjava.api.command.InspectContainerResponse;
+import de.chrisliebaer.salvage.SalvageService;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -9,8 +10,6 @@ import java.util.Optional;
 
 public record SalvageContainer(String id, Optional<String> project, List<SalvageVolume> volumes,
 							   ContainerAction action, Optional<ContainerCommand> commandPre, Optional<ContainerCommand> commandPost) {
-	
-	public static final String COMPOSE_LABEL_PROJECT = "com.docker.compose.project";
 	
 	private static final String LABEL_CONTAINER_ACTION = "salvage.action";
 	
@@ -52,7 +51,7 @@ public record SalvageContainer(String id, Optional<String> project, List<Salvage
 		var labels = container.getConfig().getLabels();
 		
 		// container might be part of compose project
-		var project = Optional.ofNullable(labels.get(COMPOSE_LABEL_PROJECT));
+		var project = Optional.ofNullable(labels.get(SalvageService.COMPOSE_LABEL_PROJECT));
 		
 		// parse user or fall back to container user
 		var user = labels.getOrDefault(LABEL_CONTAINER_COMMAND_USER, container.getConfig().getUser());

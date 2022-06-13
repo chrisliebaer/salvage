@@ -51,7 +51,7 @@ public class BackupOperation {
 			this.cranes.put(crane, CranePool.fromCrane(crane));
 	}
 	
-	public void backupVolumes(SalvageCrane defaultCrane, Collection<SalvageVolume> volumes) {
+	public void backupVolumes(SalvageCrane crane, Collection<SalvageVolume> volumes) {
 		var remaining = new ArrayList<>(volumes);
 		ArrayList<Future<Void>> futures = new ArrayList<>();
 		var completionService = new ExecutorCompletionService<Void>(executor);
@@ -67,7 +67,6 @@ public class BackupOperation {
 			synchronized (lock) {
 				while (it.hasNext()) {
 					var volume = it.next();
-					var crane = volume.crane().orElse(defaultCrane);
 					
 					// check for crane availability
 					var semaphore = cranes.get(crane).semaphore;
@@ -133,13 +132,8 @@ public class BackupOperation {
 	
 	private void backupVolume(SalvageVolume volume, SalvageCrane crane) {
 		try {
-			if (volume.dryRun()) {
-				log.info("volume '{}' has dry run enabled, this would be the moment when we would start the backup", volume.name());
-			} else {
-				var vessel = new SalvageVessel(docker, volume, crane, hostMeta);
-				vessel.start();
-			}
-			
+			var vessel = new SalvageVessel(docker, volume, crane, hostMeta);
+			vessel.start();
 		} catch (Throwable e) {
 			log.error("error while backing up volume '{}'", volume.name(), e);
 		}

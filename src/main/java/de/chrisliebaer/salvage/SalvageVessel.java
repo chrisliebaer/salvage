@@ -82,6 +82,7 @@ public class SalvageVessel {
 		log.debug("created container '{}' for crane '{}' to backup volume '{}'", container.getId(), crane, volume);
 		
 		try {
+			// TODO remove autoremove and simple remove container by hand, will get rid of many bugs
 			startBackupContainer(container);
 		} catch (Throwable e) {
 			// at this point container has been created but might not have been auto removed, so we try to remove it in an attempt to clean up
@@ -118,7 +119,7 @@ public class SalvageVessel {
 				.withFollowStream(true)
 				.exec(new FrameCallback(frame -> {
 					var line = new String(frame.getPayload(), StandardCharsets.UTF_8).trim();
-					log.debug("[{}}@{}] {}", volume.name(), crane.name(), line);
+					log.debug("[{}@{}] {}", volume.name(), crane.name(), line);
 				}));
 		log.trace("starting backup container '{}' for volume '{}'", container.getId(), volume.name());
 		docker.startContainerCmd(container.getId()).exec();
