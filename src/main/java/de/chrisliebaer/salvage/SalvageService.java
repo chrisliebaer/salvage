@@ -86,10 +86,11 @@ public class SalvageService extends AbstractService {
 	}
 	
 	private void verifyCraneImage(DockerClient docker, SalvageCrane crane) throws InterruptedException {
-		var images = docker.listImagesCmd().withImageNameFilter(crane.image()).exec();
-		log.trace("found the following images for crane {}: {}", crane.name(), images);
-		if (!images.isEmpty())
+		try {
+			var image = docker.inspectImageCmd(crane.image()).exec();
+			log.trace("found the following images for crane {}: {}", crane.name(), image.getRepoTags());
 			return;
+		} catch (NotFoundException ignore) {}
 		
 		log.info("missing image '{}' for crane '{}', pulling it now", crane.image(), crane.name());
 		var callback = docker.pullImageCmd(crane.image()).exec(new PullImageResultCallback());
