@@ -86,9 +86,11 @@ public class SalvageService extends AbstractService {
 	}
 	
 	private void verifyCraneImage(DockerClient docker, SalvageCrane crane) throws InterruptedException {
-		var images = docker.listImagesCmd().withImageNameFilter(crane.image()).exec();
-		if (!images.isEmpty())
+		try {
+			var image = docker.inspectImageCmd(crane.image()).exec();
+			log.trace("found the following image for crane {}: {}", crane.name(), image.getRepoTags());
 			return;
+		} catch (NotFoundException ignore) {}
 		
 		log.info("missing image '{}' for crane '{}', pulling it now", crane.image(), crane.name());
 		var callback = docker.pullImageCmd(crane.image()).exec(new PullImageResultCallback());
@@ -131,6 +133,9 @@ public class SalvageService extends AbstractService {
 				executeTide(tide);
 			} catch (IOException e) {
 				log.error("failed to execute tide '{}'", tide.name(), e);
+			} catch (InterruptedException e) {
+				log.warn("tide '{}' was interrupted", tide.name());
+				Thread.currentThread().interrupt();
 			}
 			ThreadContext.remove("tide");
 		}
@@ -140,15 +145,17 @@ public class SalvageService extends AbstractService {
 		notifyStopped();
 	}
 	
-	private void executeTide(SalvageTide tide) throws IOException {
+	private void executeTide(SalvageTide tide) throws IOException, InterruptedException {
 		log.info("executing tide '{}'", tide.name());
 		
 		try (var docker = createDefaultClient()) {
 			docker.pingCmd().exec();
+		
+			// user might have run system prune, so recheck if cranes are still there
+			verifyCraneImage(docker, tide.crane());
 			
 			// identifying volumes of tide is rather complicated and involes different logic, depending on wether the volume is part of a project or not
 			var volumes = getVolumeNamesForTide(docker, tide);
-			
 			
 			log.info("found {} volumes belonging to tide '{}'", volumes.size(), tide.name());
 			if (log.isDebugEnabled()) {
