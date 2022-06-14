@@ -88,7 +88,7 @@ public class SalvageService extends AbstractService {
 	private void verifyCraneImage(DockerClient docker, SalvageCrane crane) throws InterruptedException {
 		try {
 			var image = docker.inspectImageCmd(crane.image()).exec();
-			log.trace("found the following images for crane {}: {}", crane.name(), image.getRepoTags());
+			log.trace("found the following image for crane {}: {}", crane.name(), image.getRepoTags());
 			return;
 		} catch (NotFoundException ignore) {}
 		
