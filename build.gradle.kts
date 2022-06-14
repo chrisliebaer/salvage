@@ -56,6 +56,9 @@ dependencies {
 	// for parsing cron schedule
 	implementation("com.cronutils:cron-utils:9.1.6")
 	
+	// for paring command line arguments
+	implementation("org.codehaus.plexus:plexus-utils:3.4.2")
+	
 	// for creating tar archive for uploading files to docker daemon
 	implementation("org.apache.commons:commons-compress:1.21")
 	implementation("com.google.code.gson:gson:2.9.0")

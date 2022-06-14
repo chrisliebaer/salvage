@@ -2,6 +2,7 @@ package de.chrisliebaer.salvage.entity;
 
 import com.github.dockerjava.api.DockerClient;
 import lombok.extern.log4j.Log4j2;
+import org.codehaus.plexus.util.cli.CommandLineUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -21,10 +22,11 @@ public record ContainerCommand(String command, String user) {
 		var execBuilder = client.execCreateCmd(container.id())
 				.withAttachStdout(true)
 				.withAttachStderr(true)
+				.withAttachStdin(false)
 				.withEnv(Arrays.asList(config.getEnv()))
 				.withUser(user)
 				.withPrivileged(dockerContainer.getHostConfig().getPrivileged())
-				.withCmd(command);
+				.withCmd(CommandLineUtils.translateCommandline(command));
 		
 		var exec = execBuilder.exec();
 		
