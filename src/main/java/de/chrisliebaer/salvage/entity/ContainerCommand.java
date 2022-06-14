@@ -10,7 +10,7 @@ import java.util.Arrays;
  * Represents command which is supposed to be executed in target container.
  */
 @Log4j2
-public record ContainerCommand(String command, String user) {
+public record ContainerCommand(String[] command, String user) {
 	
 	public long run(DockerClient client, SalvageContainer container) throws Throwable {
 		// check container config to see how to run command
@@ -21,6 +21,7 @@ public record ContainerCommand(String command, String user) {
 		var execBuilder = client.execCreateCmd(container.id())
 				.withAttachStdout(true)
 				.withAttachStderr(true)
+				.withAttachStdin(false)
 				.withEnv(Arrays.asList(config.getEnv()))
 				.withUser(user)
 				.withPrivileged(dockerContainer.getHostConfig().getPrivileged())

@@ -2,6 +2,7 @@ package de.chrisliebaer.salvage.entity;
 
 import com.github.dockerjava.api.command.InspectContainerResponse;
 import de.chrisliebaer.salvage.SalvageService;
+import org.codehaus.plexus.util.cli.CommandLineUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -58,9 +59,9 @@ public record SalvageContainer(String id, Optional<String> project, List<Salvage
 		
 		// parse pre- and post-commands, if present
 		var preCommand = Optional.ofNullable(labels.get(LABEL_CONTAINER_COMMAND_PRE))
-				.map(s -> new ContainerCommand(s, user));
+				.map(s -> new ContainerCommand(translateCommandline(s), user));
 		var postCommand = Optional.ofNullable(labels.get(LABEL_CONTAINER_COMMAND_POST))
-				.map(s -> new ContainerCommand(s, user));
+				.map(s -> new ContainerCommand(translateCommandline(s), user));
 		
 		// set default action depending on whether pre- or post-commands are present
 		var action = preCommand.isPresent() || postCommand.isPresent() ? ContainerAction.IGNORE : ContainerAction.STOP;
@@ -76,5 +77,13 @@ public record SalvageContainer(String id, Optional<String> project, List<Salvage
 		}
 		
 		return new SalvageContainer(container.getId(), project, usedVolumes, action, preCommand, postCommand);
+	}
+	
+	private static String[] translateCommandline(String command) {
+		try {
+			return CommandLineUtils.translateCommandline(command);
+		} catch (Exception e) {
+			throw new RuntimeException("failed to parse arguments in '" + command + "'", e);
+		}
 	}
 }

@@ -86,6 +86,7 @@ Certain actions can only be performed on a container if the container is in a ce
     * `stop`: (Default if no pre- or post-action is set) The container will be stopped before the backup is performed. (Ignored if container is already stopped.)
     * `pause`: The container will be paused before the backup is performed. (Ignored if container is already paused or stopped.)
 * `salvage.command.pre` and `salvage.command.post`: Commands that will be executed before and after the backup within the container, similar to `docker exec`. Will not be executed if the container is stopped or paused.
+* `salvage.user`: User that will be used to execute the backup command. (Default is container's user)
 
 # salvage Crane Interface
 
