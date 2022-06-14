@@ -2,7 +2,6 @@ package de.chrisliebaer.salvage.entity;
 
 import com.github.dockerjava.api.DockerClient;
 import lombok.extern.log4j.Log4j2;
-import org.codehaus.plexus.util.cli.CommandLineUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -11,7 +10,7 @@ import java.util.Arrays;
  * Represents command which is supposed to be executed in target container.
  */
 @Log4j2
-public record ContainerCommand(String command, String user) {
+public record ContainerCommand(String[] command, String user) {
 	
 	public long run(DockerClient client, SalvageContainer container) throws Throwable {
 		// check container config to see how to run command
@@ -26,7 +25,7 @@ public record ContainerCommand(String command, String user) {
 				.withEnv(Arrays.asList(config.getEnv()))
 				.withUser(user)
 				.withPrivileged(dockerContainer.getHostConfig().getPrivileged())
-				.withCmd(CommandLineUtils.translateCommandline(command));
+				.withCmd(command);
 		
 		var exec = execBuilder.exec();
 		
