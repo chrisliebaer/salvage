@@ -59,9 +59,9 @@ public record SalvageContainer(String id, Optional<String> project, List<Salvage
 		
 		// parse pre- and post-commands, if present
 		var preCommand = Optional.ofNullable(labels.get(LABEL_CONTAINER_COMMAND_PRE))
-				.map(s -> new ContainerCommand(translateCommandline(s), user));
+				.map(s -> new ContainerCommand(List.of(translateCommandline(s)), user));
 		var postCommand = Optional.ofNullable(labels.get(LABEL_CONTAINER_COMMAND_POST))
-				.map(s -> new ContainerCommand(translateCommandline(s), user));
+				.map(s -> new ContainerCommand(List.of(translateCommandline(s)), user));
 		
 		// set default action depending on whether pre- or post-commands are present
 		var action = preCommand.isPresent() || postCommand.isPresent() ? ContainerAction.IGNORE : ContainerAction.STOP;

@@ -5,12 +5,13 @@ import lombok.extern.log4j.Log4j2;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * Represents command which is supposed to be executed in target container.
  */
 @Log4j2
-public record ContainerCommand(String[] command, String user) {
+public record ContainerCommand(List<String> command, String user) {
 	
 	public long run(DockerClient client, SalvageContainer container) throws Throwable {
 		// check container config to see how to run command
@@ -25,7 +26,7 @@ public record ContainerCommand(String[] command, String user) {
 				.withEnv(Arrays.asList(config.getEnv()))
 				.withUser(user)
 				.withPrivileged(dockerContainer.getHostConfig().getPrivileged())
-				.withCmd(command);
+				.withCmd(command.toArray(String[]::new));
 		
 		var exec = execBuilder.exec();
 		
