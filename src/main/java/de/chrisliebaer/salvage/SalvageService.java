@@ -197,21 +197,21 @@ public class SalvageService extends AbstractService {
 			
 			// instance worker pool for backup, which can be reused for all groups
 			var hostMeta = new BackupMeta.HostMeta(System.currentTimeMillis(), configuration.hostname());
-			var operation = new BackupOperation(docker, tide.maxConcurrent(), configuration.cranes().values(), hostMeta);
-			
-			// backup each group individually but in series
-			for (int i = 0; i < groups.size(); i++) {
-				BackupGrouping.Group group = groups.get(i);
-				log.info("starting backup of group no. {} with {} containers and {} volumes", i, group.containers().size(), group.volumes().size());
-				
-				// prepare containers for backup using transaction tracking to provide best effort in restoring container state in all circumstances
-				try (var transaction = new StateTransaction(docker)) {
-					backupGroup(tide, operation, group, transaction);
+			try (var operation = new BackupOperation(docker, tide.maxConcurrent(), configuration.cranes().values(), hostMeta);) {
+				// backup each group individually but in series
+				for (int i = 0; i < groups.size(); i++) {
+					BackupGrouping.Group group = groups.get(i);
+					log.info("starting backup of group no. {} with {} containers and {} volumes", i, group.containers().size(), group.volumes().size());
 					
-					// TODO if interrupted abort tide
+					// prepare containers for backup using transaction tracking to provide best effort in restoring container state in all circumstances
+					try (var transaction = new StateTransaction(docker)) {
+						backupGroup(tide, operation, group, transaction);
+						
+						// TODO if interrupted abort tide
+					}
+					
+					log.info("finish backup of group no. {} with {} containers and {} volumes", i, group.containers().size(), group.volumes().size());
 				}
-				
-				log.info("finish backup of group no. {} with {} containers and {} volumes", i, group.containers().size(), group.volumes().size());
 			}
 		}
 	}

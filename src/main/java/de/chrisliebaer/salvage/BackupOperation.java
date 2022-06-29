@@ -19,7 +19,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadFactory;
 
 @Slf4j
-public class BackupOperation {
+public class BackupOperation implements AutoCloseable {
 	
 	private final Object lock = new Object();
 	
@@ -49,6 +49,11 @@ public class BackupOperation {
 		this.cranes = new IdentityHashMap<>(cranes.size());
 		for (SalvageCrane crane : cranes)
 			this.cranes.put(crane, CranePool.fromCrane(crane));
+	}
+	
+	@Override
+	public void close() {
+		executor.shutdown();
 	}
 	
 	public void backupVolumes(SalvageCrane crane, Collection<SalvageVolume> volumes) {
