@@ -82,7 +82,6 @@ public class SalvageVessel {
 		log.debug("created container '{}' for crane '{}' to backup volume '{}'", container.getId(), crane, volume);
 		
 		try {
-			// TODO remove autoremove and simple remove container by hand, will get rid of many bugs
 			startBackupContainer(container);
 		} catch (Throwable e) {
 			// at this point container has been created but might not have been auto removed, so we try to remove it in an attempt to clean up
@@ -92,7 +91,7 @@ public class SalvageVessel {
 						.withRemoveVolumes(true)
 						.exec();
 			} catch (NotFoundException ignore) {
-				// container does not exist, that means it was already removed and we don't need to do anything
+				// container does not exist, that means it was already removed, and we don't need to do anything
 			} catch (Throwable e2) {
 				e.addSuppressed(e2);
 				//noinspection ThrowInsideCatchBlockWhichIgnoresCaughtException
@@ -105,7 +104,7 @@ public class SalvageVessel {
 	}
 	
 	private void startBackupContainer(CreateContainerResponse container) throws Throwable {
-		// upload meta data into container so they will be backed up by the crane
+		// upload metadata into container, so they will be backed up by the crane
 		byte[] metaTar = createMetaArchive(meta);
 		docker.copyArchiveToContainerCmd(container.getId())
 				.withTarInputStream(new ByteArrayInputStream(metaTar))

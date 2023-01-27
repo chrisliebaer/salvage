@@ -5,6 +5,7 @@ import com.cronutils.model.CronType;
 import com.cronutils.model.definition.CronDefinitionBuilder;
 import com.cronutils.parser.CronParser;
 
+import java.net.URISyntaxException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -12,13 +13,14 @@ import java.util.Map;
  * A tide defines a common set of volumes that will be backed up at the same time. This allows salvage to minimize container downtime by shutting down containers only
  * once and backup the entire application. It also allows to coordinate backups on a system level, rather than a compose project level.
  *
- * @param name          Name of the tide.
- * @param crane         Crane that will be used to backup the tide.
- * @param groupingMode  Grouping controls how the volumes of this tide are grouped. The volumes of each group will be backed up at the same time.
- * @param cron          Cron expression that defines the time when this tide will be executed.
- * @param maxConcurrent Maximum number of backups that will be executed at the same time, regardless of crane capacities.
+ * @param name              Name of the tide.
+ * @param crane             Crane that will be used to back up the tide.
+ * @param groupingMode      Grouping controls how the volumes of this tide are grouped. The volumes of each group will be backed up at the same time.
+ * @param cron              Cron expression that defines the time when this tide will be executed.
+ * @param maxConcurrent     Maximum number of backups that will be executed at the same time, regardless of crane capacities.
+ * @param reportingUrlStore Stores URLs for backup reporting for this particular tide.
  */
-public record SalvageTide(String name, SalvageCrane crane, GroupingMode groupingMode, Cron cron, int maxConcurrent) {
+public record SalvageTide(String name, SalvageCrane crane, GroupingMode groupingMode, Cron cron, int maxConcurrent, ReportingUrlStore reportingUrlStore) {
 	
 	private static final CronParser UNIX_CRONTAB_PARSER = new CronParser(CronDefinitionBuilder.instanceDefinitionFor(CronType.UNIX));
 	
@@ -82,7 +84,13 @@ public record SalvageTide(String name, SalvageCrane crane, GroupingMode grouping
 			throw new IllegalArgumentException("tried to construct tide '" + name + "', but maxConcurrent is not a number");
 		}
 		
-		return new SalvageTide(name, crane, GroupingMode.fromString(grouping), cron, maxConcurrent);
+		ReportingUrlStore reportingUrlStore;
+		try {
+			reportingUrlStore = ReportingUrlStore.fromEnv(labels, prefix + ".report");
+		} catch (URISyntaxException e) {
+			throw new IllegalArgumentException("tried to construct tide '" + name + "', but reporting url is malformed", e);
+		}
+		
+		return new SalvageTide(name, crane, GroupingMode.fromString(grouping), cron, maxConcurrent, reportingUrlStore);
 	}
-	
 }

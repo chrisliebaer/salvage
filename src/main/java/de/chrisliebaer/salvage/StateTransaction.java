@@ -10,8 +10,8 @@ import java.util.IdentityHashMap;
 import java.util.Map;
 
 /**
- * This class is responsible for changing and maintaining the state of containers during backups. It implements AutoCloseable to be able roll back the state of containers
- * in all cases.
+ * This class is responsible for changing and maintaining the state of containers during backups. It implements AutoCloseable to be able to roll back the state of
+ * containers in all cases.
  */
 @Slf4j
 @AllArgsConstructor
@@ -39,11 +39,11 @@ public class StateTransaction implements AutoCloseable {
 		for (var entry : affectedContainers.entrySet()) {
 			var container = entry.getKey();
 			var state = entry.getValue();
-			log.debug("rolling back container {}", container.id());
+			log.debug("rolling back container {}", container.name());
 			try {
 				restore(container);
 			} catch (Throwable e) {
-				throw new IllegalStateException("failed to roll back container state for container " + container.id(), e);
+				throw new IllegalStateException("failed to roll back container state for container " + container.name(), e);
 			}
 		}
 	}
@@ -57,7 +57,7 @@ public class StateTransaction implements AutoCloseable {
 			inspect = docker.inspectContainerCmd(container.id()).exec();
 			var state = inspect.getState();
 			if (state.getRestarting()) {
-				log.debug("container {} is restarting, waiting {}ms ({} tries remaining)", container.id(), RETRY_DELAY, remainingRetries);
+				log.debug("container {} is restarting, waiting {}ms ({} tries remaining)", container.name(), RETRY_DELAY, remainingRetries);
 				Thread.sleep(RETRY_DELAY);
 			} else {
 				break;
@@ -68,18 +68,18 @@ public class StateTransaction implements AutoCloseable {
 		
 		// abort, rather than perform backup with container in unknown state
 		if (state.getRestarting()) {
-			throw new IllegalStateException("container '" + container.id() + "' has not reached stable state after " + RETRY_COUNT + " retries");
+			throw new IllegalStateException("container '" + container.name() + "' has not reached stable state after " + RETRY_COUNT + " retries");
 		}
 		
 		// run preperation command if container has one and is running (not paused)
 		boolean preCommandRun = false;
 		if (container.commandPre().isPresent() && state.getRunning() && !state.getPaused()) {
 			var command = container.commandPre().get();
-			log.debug("running preperation command '{}' on container {}", command, container.id());
+			log.debug("running preperation command '{}' on container {}", command, container.name());
 			try {
 				command.run(docker, container);
 			} catch (Throwable e) {
-				throw new IllegalStateException("preperation command '" + command + "' failed on container '" + container.id() + "'", e);
+				throw new IllegalStateException("preperation command '" + command + "' failed on container '" + container.name() + "'", e);
 			}
 			
 			preCommandRun = true;
@@ -92,18 +92,18 @@ public class StateTransaction implements AutoCloseable {
 		
 		// alter container state, if necessary
 		switch (container.action()) {
-			case IGNORE -> log.debug("container {} has no action, skipping", container.id());
+			case IGNORE -> log.debug("container {} has no action, skipping", container.name());
 			case STOP -> {
-				// container must ne running and not paused, if it's not running at all, there is no need to stop it (but we must not start it again)
+				// container must be running and not paused, if it's not running at all, there is no need to stop it (but we must not start it again)
 				if (state.getRunning()) {
 					if (state.getPaused()) {
-						throw new IllegalStateException("container '" + container.id() + "' is paused, cannot stop");
+						throw new IllegalStateException("container '" + container.name() + "' is paused, cannot stop");
 					}
-					log.debug("stopping container {}", container.id());
+					log.debug("stopping container {}", container.name());
 					docker.stopContainerCmd(container.id()).exec();
 					
 					restoreFn = (d, c) -> {
-						log.debug("starting container {}", c.id());
+						log.debug("starting container {}", c.name());
 						d.startContainerCmd(c.id()).exec();
 					};
 				}
@@ -111,11 +111,11 @@ public class StateTransaction implements AutoCloseable {
 			case PAUSE -> {
 				// if container is running, we need to pause it (otherwise we don't need to do anything)
 				if (state.getRunning() && !state.getPaused()) {
-					log.debug("pausing container {}", container.id());
+					log.debug("pausing container {}", container.name());
 					docker.pauseContainerCmd(container.id()).exec();
 					
 					restoreFn = (d, c) -> {
-						log.debug("unpausing container {}", c.id());
+						log.debug("unpausing container {}", c.name());
 						d.unpauseContainerCmd(c.id()).exec();
 					};
 				}
@@ -132,7 +132,7 @@ public class StateTransaction implements AutoCloseable {
 		
 		if (affected.preCommandRun() && container.commandPost().isPresent()) {
 			var command = container.commandPost().get();
-			log.debug("running post command '{}' on container {}", command, container.id());
+			log.debug("running post command '{}' on container {}", command, container.name());
 			command.run(docker, container);
 		}
 	}
@@ -140,7 +140,7 @@ public class StateTransaction implements AutoCloseable {
 	/**
 	 * This class is used to store the dynamic restore function for a container, depending on the action that was performed and which state it was in before.
 	 *
-	 * @param restoreFn the restore function.
+	 * @param restoreFn     the restore function.
 	 * @param preCommandRun whether the preperation command was run, meaning that we also need to run the post command.
 	 */
 	private record AffectedContainer(RestoreFunction restoreFn, boolean preCommandRun) {}

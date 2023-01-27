@@ -4,6 +4,8 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.Service;
 import lombok.extern.log4j.Log4j2;
 
+import java.time.Duration;
+
 @SuppressWarnings("CallToSystemExit")
 @Log4j2
 public enum SalvageMain {
@@ -47,5 +49,14 @@ public enum SalvageMain {
 			log.info("termination signal received, stopping salvage service, please wait...");
 			service.stopAsync().awaitTerminated();
 		}, "SalvageShutdownHook"));
+	}
+	
+	public static String formatDuration(Duration duration) {
+		// https://stackoverflow.com/a/40487511/1834100
+		return duration.toString()
+				.substring(2)
+				.replaceAll("(\\d[HMS])(?!$)", "$1 ")
+				.replaceAll("\\.\\d+", "")
+				.toLowerCase();
 	}
 }

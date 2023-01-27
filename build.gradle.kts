@@ -42,6 +42,7 @@ repositories {
 dependencies {
 	
 	implementation("com.google.guava:guava:31.1-jre")
+	implementation("org.apache.commons:commons-text:1.10.0")
 	
 	val log4j2 = "2.17.2"
 	implementation("org.apache.logging.log4j:log4j-api:$log4j2")
