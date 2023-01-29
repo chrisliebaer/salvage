@@ -162,15 +162,20 @@ public class WebhookReporter implements CaptainHook {
 	}
 	
 	private CompletableFuture<HttpResponse<Void>> send(Map<String, String> map, URI url, String template) {
-		map.replaceAll((k, v) -> StringEscapeUtils.escapeJson(v));
-		
-		StrSubstitutor sub = new StrSubstitutor(map);
-		var body = sub.replace(template);
-		
-		var req = HttpRequest.newBuilder(url)
-				.header("Content-Type", "application/json")
-				.POST(HttpRequest.BodyPublishers.ofString(body))
-				.build();
+		HttpRequest req;
+		if (store.method() == ReportingUrlStore.Method.GET) {
+			req = HttpRequest.newBuilder(url)
+					.GET()
+					.build();
+		} else {
+			map.replaceAll((k, v) -> StringEscapeUtils.escapeJson(v));
+			StrSubstitutor sub = new StrSubstitutor(map);
+			var body = sub.replace(template);
+			req = HttpRequest.newBuilder(url)
+					.header("Content-Type", "application/json")
+					.POST(HttpRequest.BodyPublishers.ofString(body))
+					.build();
+		}
 		
 		return client.sendAsync(req, HttpResponse.BodyHandlers.discarding());
 	}

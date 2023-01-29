@@ -117,10 +117,7 @@ The following labels can be used to configure Discord webhooks for a tide:
 * `salvage.tides.<name>.report.tide.failure`: Called after a tide has failed, may provide affected volumes, if the docker daemon was reachable.
 * `salvage.tides.<name>.report.volume.success`: Called after a volume has been backed up successfully.
 * `salvage.tides.<name>.report.volume.failure`: Called after a volume backup has failed.
-
-Note that salvage will do a POST request to the configured endpoint with a Discord webhook payload.
-Other services are currently not supported but some monitoring services (such as Uptime Kumara) only require a simple HTTP request to be sent.
-In this case, you can configure a URL that just expects a POST request and discard the payload.
+* `salvage.tides.<name>.report.method`: The method to use for reporting. Can be `POST` or `GET`. Using `GET` will not deliver any payload. (Default is `POST`)
 
 # Troubleshooting
 
