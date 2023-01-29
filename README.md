@@ -21,7 +21,7 @@ A Crane is a Docker image, which implements the salvage Crane interface.
 After salvage has prepared all attached containers for backup, it instances a Crane to perform the actual backup.
 salvage will wait for the Crane to complete the backup, before reversing the performed *backup actions* on all containers, returning everything back to full operations.
 
-This design allows to backup volumes with most file-based backup solutions, while ensuring that these solution don't need to interface with docker directly.
+This design allows to back up volumes with most file-based backup solutions, while ensuring that these solution don't need to interface with docker directly.
 
 # Configuration
 

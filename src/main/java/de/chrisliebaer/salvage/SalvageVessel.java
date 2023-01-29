@@ -3,7 +3,6 @@ package de.chrisliebaer.salvage;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.command.WaitContainerResultCallback;
-import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.model.AccessMode;
 import com.github.dockerjava.api.model.Bind;
 import com.github.dockerjava.api.model.HostConfig;
@@ -15,6 +14,7 @@ import de.chrisliebaer.salvage.entity.BackupMeta;
 import de.chrisliebaer.salvage.entity.FrameCallback;
 import de.chrisliebaer.salvage.entity.SalvageCrane;
 import de.chrisliebaer.salvage.entity.SalvageVolume;
+import de.chrisliebaer.salvage.reporting.VolumeLog;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
@@ -55,16 +55,18 @@ public class SalvageVessel {
 	private final SalvageVolume volume;
 	private final SalvageCrane crane;
 	private final BackupMeta meta;
+	private final VolumeLog volumeLog;
 	
-	public SalvageVessel(DockerClient docker, SalvageVolume volume, SalvageCrane crane, BackupMeta.HostMeta hostMeta) {
+	public SalvageVessel(DockerClient docker, SalvageVolume volume, SalvageCrane crane, BackupMeta.HostMeta hostMeta, VolumeLog volumeLog) {
 		this.docker = docker;
 		this.volume = volume;
 		this.crane = crane;
+		this.volumeLog = volumeLog;
 		
 		meta = new BackupMeta(hostMeta, volume.meta(), crane.name(), crane.image());
 	}
 	
-	public void start() {
+	public void start() throws Throwable {
 		var env = new HashMap<>(crane.env());
 		env.put(CRANE_ENV_MACHINE_NAME, meta.hostMeta().host());
 		env.put(CRANE_ENV_CRANE_NAME, meta.crane());
@@ -84,22 +86,23 @@ public class SalvageVessel {
 		try {
 			startBackupContainer(container);
 		} catch (Throwable e) {
-			// at this point container has been created but might not have been auto removed, so we try to remove it in an attempt to clean up
-			try {
-				docker.removeContainerCmd(container.getId())
-						.withForce(true)
-						.withRemoveVolumes(true)
-						.exec();
-			} catch (NotFoundException ignore) {
-				// container does not exist, that means it was already removed, and we don't need to do anything
-			} catch (Throwable e2) {
-				e.addSuppressed(e2);
-				//noinspection ThrowInsideCatchBlockWhichIgnoresCaughtException
-				throw new RuntimeException("failed to remove container '" + container.getId() + "' in response to error during backup", e);
+			// since we are using auto remove, docker will remove the container for us unless it has never been started
+			var inspect = docker.inspectContainerCmd(container.getId()).exec();
+			if ("created".equalsIgnoreCase(inspect.getState().getStatus())) {
+				try {
+					docker.removeContainerCmd(container.getId())
+							.withForce(true)
+							.withRemoveVolumes(true)
+							.exec();
+				} catch (Throwable e2) {
+					e.addSuppressed(e2);
+					//noinspection ThrowInsideCatchBlockWhichIgnoresCaughtException
+					throw new RuntimeException("failed to remove container '" + container.getId() + "' in response to error during backup", e);
+				}
+				// if we succeeded to remove the container, we rethrow the original exception
+				log.debug("backup of '{}' failed but we still managed to remove crane container '{}'", volume.name(), container.getId());
+				throw e;
 			}
-			// if we succeeded to remove the container, we rethrow the original exception
-			log.debug("backup of '{}' failed but we still managed to remove crane container '{}'", volume.name(), container.getId());
-			throw new RuntimeException("backup of volume '" + volume.name() + "' failed", e);
 		}
 	}
 	
@@ -118,6 +121,7 @@ public class SalvageVessel {
 				.withFollowStream(true)
 				.exec(new FrameCallback(frame -> {
 					var line = new String(frame.getPayload(), StandardCharsets.UTF_8).trim();
+					volumeLog.log(line);
 					log.debug("[{}@{}] {}", volume.name(), crane.name(), line);
 				}));
 		log.trace("starting backup container '{}' for volume '{}'", container.getId(), volume.name());

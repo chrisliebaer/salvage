@@ -18,7 +18,10 @@ import de.chrisliebaer.salvage.entity.SalvageCrane;
 import de.chrisliebaer.salvage.entity.SalvageTide;
 import de.chrisliebaer.salvage.entity.SalvageVolume;
 import de.chrisliebaer.salvage.grouping.BackupGrouping;
-import de.chrisliebaer.salvage.reporting.CaptainsLog;
+import de.chrisliebaer.salvage.reporting.CaptainHook;
+import de.chrisliebaer.salvage.reporting.FinishState;
+import de.chrisliebaer.salvage.reporting.TideLog;
+import de.chrisliebaer.salvage.reporting.VolumeLog;
 import de.chrisliebaer.salvage.reporting.WebhookReporter;
 import lombok.extern.log4j.Log4j2;
 import org.apache.logging.log4j.ThreadContext;
@@ -28,7 +31,6 @@ import java.net.http.HttpClient;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZonedDateTime;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -139,19 +141,7 @@ public class SalvageService extends AbstractService {
 			}
 			
 			ThreadContext.put("tide", tide.name());
-			var captainsLog = new WebhookReporter(tide.reportingUrlStore(), configuration.hostname(), httpClient);
-			var start = Instant.now();
-			try {
-				var volumes = executeTide(tide, captainsLog);
-				captainsLog.reportTideSuccess(tide.name(), volumes.stream().map(SalvageVolume::name).toList(), Duration.between(start, Instant.now()));
-			} catch (IOException e) {
-				log.error("failed to execute tide '{}'", tide.name(), e);
-				captainsLog.reportTideFailure(tide.name(), Duration.between(start, Instant.now()), e);
-			} catch (InterruptedException e) {
-				log.warn("tide '{}' was interrupted", tide.name());
-				captainsLog.reportTideFailure(tide.name(), Duration.between(start, Instant.now()), e);
-				Thread.currentThread().interrupt();
-			}
+			tideExceptionWrapped(tide);
 			ThreadContext.remove("tide");
 		}
 		log.info("exiting salvage service thread");
@@ -160,12 +150,40 @@ public class SalvageService extends AbstractService {
 		notifyStopped();
 	}
 	
-	private Collection<SalvageVolume> executeTide(SalvageTide tide, CaptainsLog captainsLog) throws IOException, InterruptedException {
+	/**
+	 * Wraps tide execution in handler logic for error reporting.
+	 *
+	 * @param tide tide to execute
+	 */
+	private void tideExceptionWrapped(SalvageTide tide) {
+		var hook = new WebhookReporter(tide.reportingUrlStore(), configuration.hostname(), httpClient);
+		var tideLog = new TideLog(tide, hook);
+		
+		var start = Instant.now();
+		try {
+			executeTide(tide, tideLog);
+		} catch (IOException e) {
+			log.error("failed to execute tide '{}'", tide.name(), e);
+			tideLog.failure(e);
+		} catch (InterruptedException e) {
+			log.warn("tide '{}' was interrupted, skipping reporting since JVM wants to shut down", tide.name());
+			Thread.currentThread().interrupt();
+			return;
+		} catch (Throwable e) {
+			log.error("unexpected error while executing tide '{}', please report this issue", tide.name(), e);
+			tideLog.failure("fatal error, check logs and report issue");
+		}
+		
+		doTideReporting(tideLog, hook);
+	}
+	
+	private void executeTide(SalvageTide tide, TideLog tideLog) throws IOException, InterruptedException {
 		log.info("executing tide '{}'", tide.name());
+		tideLog.start();
 		
 		try (var docker = createDefaultClient()) {
 			docker.pingCmd().exec();
-		
+			
 			// user might have run system prune, so recheck if cranes are still there
 			verifyCraneImage(docker, tide.crane());
 			
@@ -198,7 +216,7 @@ public class SalvageService extends AbstractService {
 			
 			// group tide into waves to minimize downtime
 			var groups = BackupGrouping.groups(containers, volumes, tide.groupingMode());
-			log.info("grouping tide into {} waves", groups.size());
+			log.debug("grouping tide into {} waves", groups.size());
 			if (log.isDebugEnabled()) {
 				for (int i = 0; i < groups.size(); i++) {
 					var group = groups.get(i);
@@ -210,27 +228,70 @@ public class SalvageService extends AbstractService {
 				}
 			}
 			
-			// instance worker pool for backup, which can be reused for all groups
 			var hostMeta = new BackupMeta.HostMeta(System.currentTimeMillis(), configuration.hostname());
-			try (var operation = new BackupOperation(docker, tide.maxConcurrent(), configuration.cranes().values(), hostMeta, captainsLog)) {
+			
+			// instance worker pool for backup, which can be reused for all groups
+			try (var operation = new BackupOperation(docker, tide.maxConcurrent(), configuration.cranes().values(), hostMeta, tideLog)) {
 				// backup each group individually but in series
 				for (int i = 0; i < groups.size(); i++) {
 					BackupGrouping.Group group = groups.get(i);
-					log.info("starting backup of group no. {} with {} containers and {} volumes", i, group.containers().size(), group.volumes().size());
+					log.debug("starting backup of group no. {} with {} containers and {} volumes", i, group.containers().size(), group.volumes().size());
 					
 					// prepare containers for backup using transaction tracking to provide the best effort in restoring container state in all circumstances
 					try (var transaction = new StateTransaction(docker)) {
 						backupGroup(tide, operation, group, transaction);
 						
-						// TODO if interrupted abort tide
+						// TODO if interrupted abort tide, probably should cancel vessel as well
 					}
 					
-					log.info("finish backup of group no. {} with {} containers and {} volumes", i, group.containers().size(), group.volumes().size());
+					log.debug("finish backup of group no. {} with {} containers and {} volumes", i, group.containers().size(), group.volumes().size());
 				}
 			}
-			
-			return volumes.values();
 		}
+		
+		tideLog.success();
+	}
+	
+	private static void doTideReporting(TideLog tideLog, CaptainHook hook) {
+		var tideResult = tideLog.tideResult();
+		
+		// volume list will not always be present, depending on the reason the tide failed, logging needs to be aware of that
+		var volumes = tideLog.volumeLogs().stream().map(VolumeLog::volume).toList();
+		
+		if (tideResult.state() == FinishState.SUCCESS) {
+			if (volumes.isEmpty()) {
+				log.info("tide '{}' successfully finished, but no volumes are assigned to tide", tideLog.tide().name());
+			} else {
+				var volumesStr = volumes.stream().map(SalvageVolume::name).collect(Collectors.joining(", "));
+				log.info("tide '{}' successfully finished back up volumes: {}", tideLog.tide().name(), volumesStr);
+			}
+			
+			hook.reportTideSuccess(tideLog.tide(), volumes, tideLog.stopWatch().duration());
+			return;
+		}
+		
+		// tide encountered issues, check how many volumes were successfully backed up
+		var successfulVolumes = tideLog.volumeLogs().stream().filter(v -> v.state() == FinishState.SUCCESS).map(VolumeLog::volume).toList();
+		var failedVolumes = tideLog.volumeLogs().stream().filter(v -> v.state() == FinishState.FAILURE).map(VolumeLog::volume).toList();
+		
+		if (!failedVolumes.isEmpty() || !successfulVolumes.isEmpty()) {
+			// due to how tide volumes are requested, if there is at least one volume, we can assume that all volumes are present
+			var successfulVolumesStr = successfulVolumes.stream().map(SalvageVolume::name).collect(Collectors.joining(", "));
+			var failedVolumesStr = failedVolumes.stream().map(SalvageVolume::name).collect(Collectors.joining(", "));
+			log.error(
+					"tide '{}' failed partially. successfully backed up volumes: {}, failed volumes: {} (reason: {})",
+					tideLog.tide().name(),
+					successfulVolumesStr,
+					failedVolumesStr,
+					tideResult.message());
+			hook.reportTideFailure(tideLog.tide(), successfulVolumes, failedVolumes, tideResult.message(), tideLog.stopWatch().duration());
+		} else {
+			// tide failed before any volumes were indexed
+			log.error("tide '{}' failed (reason: {})", tideLog.tide().name(), tideResult.message());
+			hook.reportTideFailure(tideLog.tide(), tideResult.message(), tideLog.stopWatch().duration());
+		}
+		
+		// report for individual volumes is done in the volume log itself in order to have them closer to the actual time the volume was backed up
 	}
 	
 	private static void backupGroup(SalvageTide tide, BackupOperation operation, BackupGrouping.Group group, StateTransaction transaction) {

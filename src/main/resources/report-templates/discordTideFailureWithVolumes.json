@@ -1,0 +1,30 @@
+{
+	"username": "Salvage Daemon (${host})",
+	"embeds": [
+		{
+			"title": "Tide `${tide}` failed!",
+			"description": "```\n${exception}\n```",
+			"color": 13965079,
+			"fields": [
+				{
+					"name": "Successfull volumes",
+					"value": "${success}",
+					"inline": true
+				},
+				{
+					"name": "Failed volumes",
+					"value": "${failure}",
+					"inline": true
+				},
+				{
+					"name": "Duration",
+					"value": "${duration}",
+					"inline": true
+				}
+			],
+			"footer": {
+				"text": "${host}"
+			}
+		}
+	]
+}

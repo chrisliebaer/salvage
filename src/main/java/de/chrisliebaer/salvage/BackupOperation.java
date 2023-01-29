@@ -4,12 +4,11 @@ import com.github.dockerjava.api.DockerClient;
 import de.chrisliebaer.salvage.entity.BackupMeta;
 import de.chrisliebaer.salvage.entity.SalvageCrane;
 import de.chrisliebaer.salvage.entity.SalvageVolume;
-import de.chrisliebaer.salvage.reporting.CaptainsLog;
+import de.chrisliebaer.salvage.reporting.TideLog;
+import de.chrisliebaer.salvage.reporting.VolumeLog;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.logging.log4j.ThreadContext;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.IdentityHashMap;
@@ -30,12 +29,12 @@ public class BackupOperation implements AutoCloseable {
 	private final ExecutorService executor;
 	private final Map<SalvageCrane, CranePool> cranes;
 	private final BackupMeta.HostMeta hostMeta;
-	private final CaptainsLog logbook;
+	private final TideLog tideLog;
 	
-	public BackupOperation(DockerClient docker, int maxConcurrent, Collection<SalvageCrane> cranes, BackupMeta.HostMeta hostMeta, CaptainsLog logbook) {
+	public BackupOperation(DockerClient docker, int maxConcurrent, Collection<SalvageCrane> cranes, BackupMeta.HostMeta hostMeta, TideLog tideLog) {
 		this.docker = docker;
 		this.hostMeta = hostMeta;
-		this.logbook = logbook;
+		this.tideLog = tideLog;
 		
 		// each worker will use its own docker client, we cant fully prevent networks errors, so later code needs to handle unexpected loss of connection to docker
 		executor = Executors.newFixedThreadPool(maxConcurrent, new ThreadFactory() {
@@ -84,12 +83,13 @@ public class BackupOperation implements AutoCloseable {
 						
 						// crane found, remove volume from remaining list and submit backup task
 						it.remove();
+						var volumeLog = tideLog.getVolumeLog(volume, crane);
 						log.trace("found instance crane '{}' for volume '{}', deploying", crane.name(), volume.name());
 						var future = completionService.submit(() -> {
 							try {
-								log.info("starting backup for volume '{}' on crane '{}'", volume.name(), crane.name());
 								ThreadContext.put("volume", volume.name());
-								backupVolume(volume, crane);
+								log.info("starting backup for volume '{}' on crane '{}'", volume.name(), crane.name());
+								backupVolume(volume, crane, volumeLog);
 							} finally {
 								log.trace("returning crane '{}' to pool", crane.name());
 								synchronized (lock) {
@@ -140,15 +140,15 @@ public class BackupOperation implements AutoCloseable {
 			Thread.currentThread().interrupt();
 	}
 	
-	private void backupVolume(SalvageVolume volume, SalvageCrane crane) {
-		Instant start = Instant.now();
+	private void backupVolume(SalvageVolume volume, SalvageCrane crane, VolumeLog volumeLog) {
 		try {
-			var vessel = new SalvageVessel(docker, volume, crane, hostMeta);
+			volumeLog.start();
+			var vessel = new SalvageVessel(docker, volume, crane, hostMeta, volumeLog);
 			vessel.start();
-			logbook.reportVolumeSuccess(volume.name(), crane.name(), Duration.between(start, Instant.now()));
+			volumeLog.success();
 		} catch (Throwable e) {
 			log.error("error while backing up volume '{}'", volume.name(), e);
-			logbook.reportVolumeFailure(volume.name(), crane.name(), Duration.between(start, Instant.now()), e);
+			volumeLog.failure(e);
 		}
 	}
 	
