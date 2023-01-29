@@ -1,5 +1,7 @@
 # WARNING: Work in progress! Very unstable, not ready for anything larger than a calculator.
 
+![Salvage Logo](https://raw.githubusercontent.com/chrisliebaer/salvage/notification/logo.png)
+
 salvage is my solution for backing up small scale Docker applications.
 Or more specifically: **my** Docker infrastructure.
 As with most things Docker related, the puns are important.
