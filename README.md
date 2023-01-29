@@ -11,11 +11,11 @@ I could go on for miles, but let's get back on course.
 
 salvage will identify all volumes on the current Docker instance, that need to be backed up.
 It will then identify all containers attached to each volume and perform their configured *backup action* to prepare the volume for backup, ensuring data consistency.
-If multiple containers are sharing a common set of volumes and you would like to back them up all at the same time, `Tides` can be configured.
+If multiple containers are sharing a common set of volumes, and you would like to back them up all at the same time, `Tides` can be configured.
 A Tide tells salvage which volumes should be backup up at the same time.
-All affected containers of a Tide will have their *backup action* performed at the same time, to reduce potential down time.
+All affected containers of a Tide will have their *backup action* performed at the same time, to reduce potential downtime.
 
-While salvage takes care of orchestrating all backups, it does not actually backup any data.
+While salvage takes care of orchestrating all backups, it does not actually back up any data.
 It delegates this job to *Cranes*.
 A Crane is a Docker image, which implements the salvage Crane interface.
 After salvage has prepared all attached containers for backup, it instances a Crane to perform the actual backup.
@@ -66,7 +66,7 @@ The following labels are used to configure a crane and need to present on the sa
 
 ### Volume configuration
 
-By default, Salvage will ignore all volumes it hasn't been explicitly instructed to backup.
+By default, Salvage will ignore all volumes it hasn't been explicitly instructed to back up.
 In order to configure a volume for backup, you need to label it as such.
 Since changing labels on volumes is not supported by Docker, volumes are configured by attaching labels to containers instead (see FAQ).
 To do this, place the `salvage.tide.<name>=<volume1>,<volume2>,...` label on any container (it doesn't need to actually use the volume).
@@ -81,7 +81,7 @@ The following labels can be used on containers and will define how Salvage will 
 All modifications to a container's state will be reverted after the backup is done.
 Certain actions can only be performed on a container if the container is in a certain state.
 
-* `salvage.action`: Defines if the container state should be altered before backing up it's volumes. Possible values are:
+* `salvage.action`: Defines if the container state should be altered before backing up its volumes. Possible values are:
     * `ignore`: Container state will not be altered. (Default if either pre- or post-action is set).
     * `stop`: (Default if no pre- or post-action is set) The container will be stopped before the backup is performed. (Ignored if container is already stopped.)
     * `pause`: The container will be paused before the backup is performed. (Ignored if container is already paused or stopped.)
@@ -99,11 +99,32 @@ The following environment variables are passed to the crane:
 * `SALVAGE_VOLUME_NAME`: The name of the volume.
 * as well as any additional environment variables specified in the crane configuration.
 
-salvage will mount the volume at `/salvage/volume` (read-only) and include some meta data at `/salvage/meta`.
-The crane is expected to backup and restore both of these directories.
+salvage will mount the volume at `/salvage/volume` (read-only) and include some metadata at `/salvage/meta`.
+The crane is expected to back up and restore both of these directories.
 The content within the `/salvage/meta` directory is not part of the crane interface, and may change at any time.
 Do not rely on it.
 Any additional volumes will be mounted writable, as specified in the crane configuration.
+
+# Reporting and monitoring
+
+Salvage can be configured to call Discord webhooks on certain events.
+Configuration is done on a per-tide basis.
+The following labels can be used to configure Discord webhooks for a tide:
+
+* `salvage.tides.<name>.report.tide.success`: Called after a tide has been executed successfully.
+* `salvage.tides.<name>.report.tide.failure`: Called after a tide has failed, may provide affected volumes, if the docker daemon was reachable.
+* `salvage.tides.<name>.report.volume.success`: Called after a volume has been backed up successfully.
+* `salvage.tides.<name>.report.volume.failure`: Called after a volume backup has failed.
+
+Note that salvage will do a POST request to the configured endpoint with a Discord webhook payload.
+Other services are currently not supported but some monitoring services (such as Uptime Kumara) only require a simple HTTP request to be sent.
+In this case, you can configure a URL that just expects a POST request and discard the payload.
+
+# Troubleshooting
+
+Salvage will write logs to stdout using log4j2.
+If you are familiar with log4j2, you can override its configuration (see log4j2 documentation).
+Otherwise, you can set the `VERBOSE` environment variable to `true` to enable verbose logging.
 
 # Restrictions
 
@@ -115,6 +136,9 @@ Salvage attempts to minimize potential issues, but ultimately requires the host 
 ## Why not backup the volume directory from outside of containers?
 
 If you think that's a good idea go ahead and do it.
+Backing up the volume directory from outside of containers provides no means of stopping the container from modifying the volume while the backup is running.
+It also requires you to run a separate process on the host, which is not what we want in a pure Docker setup.
+Last but not least, you have to maintain container dependencies and volume configurations at two places, whereas with Salvage you can configure everything in the services `docker-compose.yml` file.
 
 ## Can I run multiple salvage instances on the same docker daemon?
 

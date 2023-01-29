@@ -3,15 +3,25 @@ package de.chrisliebaer.salvage;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.Service;
 import lombok.extern.log4j.Log4j2;
+import org.apache.logging.log4j.core.config.Configurator;
 
+import java.net.URISyntaxException;
 import java.time.Duration;
+import java.util.Locale;
 
 @SuppressWarnings("CallToSystemExit")
 @Log4j2
 public enum SalvageMain {
 	;
 	
-	public static void main(String[] args) {
+	public static void main(String[] args) throws URISyntaxException {
+		var verbose = System.getenv("VERBOSE");
+		if (verbose != null) {
+			switch (verbose.toLowerCase(Locale.ROOT)) {
+				case "true", "1", "yes" -> Configurator.reconfigure(SalvageMain.class.getClassLoader().getResource("log4j2-verbose.xml").toURI());
+			}
+			log.info("verbose logging enabled");
+		}
 		
 		var service = new SalvageService();
 		service.addListener(new Service.Listener() {
