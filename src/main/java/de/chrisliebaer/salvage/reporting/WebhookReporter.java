@@ -27,6 +27,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class WebhookReporter implements CaptainHook {
 	
+	private static final String AVATAR_URL = "https://raw.githubusercontent.com/chrisliebaer/salvage/master/logo.png";
 	private static final int MAX_EXCEPTION_LENGTH = 3000;
 	
 	private static final String TEMPLATE_VOLUME_SUCCESS;
@@ -63,6 +64,7 @@ public class WebhookReporter implements CaptainHook {
 	private Map<String, String> defaultMap() {
 		var map = new HashMap<String, String>();
 		map.put("host", host);
+		map.put("avatar", AVATAR_URL);
 		return map;
 	}
 	

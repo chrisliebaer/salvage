@@ -1,5 +1,6 @@
 {
 	"username": "Salvage Daemon (${host})",
+	"avatar_url": "${avatar}",
 	"embeds": [
 		{
 			"title": "Tide `${tide}` failed!",
