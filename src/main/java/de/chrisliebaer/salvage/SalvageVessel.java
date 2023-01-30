@@ -3,6 +3,7 @@ package de.chrisliebaer.salvage;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.command.WaitContainerResultCallback;
+import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.model.AccessMode;
 import com.github.dockerjava.api.model.Bind;
 import com.github.dockerjava.api.model.HostConfig;
@@ -86,23 +87,29 @@ public class SalvageVessel {
 		try {
 			startBackupContainer(container);
 		} catch (Throwable e) {
-			// since we are using auto remove, docker will remove the container for us unless it has never been started
-			var inspect = docker.inspectContainerCmd(container.getId()).exec();
-			if ("created".equalsIgnoreCase(inspect.getState().getStatus())) {
-				try {
+			
+			try {
+				// since we are using auto remove, docker will remove the container for us unless it has never been started
+				// todo can fail if container is already removed
+				var inspect = docker.inspectContainerCmd(container.getId()).exec();
+				if ("created".equalsIgnoreCase(inspect.getState().getStatus())) {
 					docker.removeContainerCmd(container.getId())
 							.withForce(true)
 							.withRemoveVolumes(true)
 							.exec();
-				} catch (Throwable e2) {
-					e.addSuppressed(e2);
-					//noinspection ThrowInsideCatchBlockWhichIgnoresCaughtException
-					throw new RuntimeException("failed to remove container '" + container.getId() + "' in response to error during backup", e);
 				}
-				// if we succeeded to remove the container, we rethrow the original exception
-				log.debug("backup of '{}' failed but we still managed to remove crane container '{}'", volume.name(), container.getId());
-				throw e;
+			} catch (NotFoundException ignore) {
+				// container was already removed, ignore
+			} catch (Throwable e2) {
+				e.addSuppressed(e2);
+				//noinspection ThrowInsideCatchBlockWhichIgnoresCaughtException
+				throw new RuntimeException("failed to remove container '" + container.getId() + "' in response to error during backup", e);
 			}
+			// if we succeeded to remove the container, we rethrow the original exception
+			log.debug("backup of '{}' failed but we still managed to remove crane container '{}'", volume.name(), container.getId());
+			
+			
+			throw e;
 		}
 	}
 	
