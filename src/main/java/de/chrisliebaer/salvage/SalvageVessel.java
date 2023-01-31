@@ -139,7 +139,7 @@ public class SalvageVessel {
 		frameCallback.join();
 		var statusCode = waitCallback.awaitStatusCode();
 		if (statusCode != 0) {
-			throw new RuntimeException("backup of volume '" + volume + "' failed with exit code " + statusCode);
+			throw new RuntimeException("backup of volume '" + volume.name() + "' failed with exit code " + statusCode);
 		}
 	}
 	
