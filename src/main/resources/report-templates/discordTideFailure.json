@@ -1,0 +1,21 @@
+{
+	"username": "Salvage Daemon (${host})",
+	"avatar_url": "${avatar}",
+	"embeds": [
+		{
+			"title": "Tide `${tide}` failed!",
+			"description": "```\n${exception}\n```",
+			"color": 13965079,
+			"fields": [
+				{
+					"name": "Duration",
+					"value": "${duration}",
+					"inline": true
+				}
+			],
+			"footer": {
+				"text": "${host}"
+			}
+		}
+	]
+}

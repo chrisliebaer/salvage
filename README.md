@@ -1,4 +1,7 @@
 # WARNING: Work in progress! Very unstable, not ready for anything larger than a calculator.
+Also, there aren't really any crane implementations yet, other than the one I use for my own infrastructure.
+
+![Salvage Logo](https://raw.githubusercontent.com/chrisliebaer/salvage/master/logo.png)
 
 salvage is my solution for backing up small scale Docker applications.
 Or more specifically: **my** Docker infrastructure.
@@ -11,17 +14,17 @@ I could go on for miles, but let's get back on course.
 
 salvage will identify all volumes on the current Docker instance, that need to be backed up.
 It will then identify all containers attached to each volume and perform their configured *backup action* to prepare the volume for backup, ensuring data consistency.
-If multiple containers are sharing a common set of volumes and you would like to back them up all at the same time, `Tides` can be configured.
+If multiple containers are sharing a common set of volumes, and you would like to back them up all at the same time, `Tides` can be configured.
 A Tide tells salvage which volumes should be backup up at the same time.
-All affected containers of a Tide will have their *backup action* performed at the same time, to reduce potential down time.
+All affected containers of a Tide will have their *backup action* performed at the same time, to reduce potential downtime.
 
-While salvage takes care of orchestrating all backups, it does not actually backup any data.
+While salvage takes care of orchestrating all backups, it does not actually back up any data.
 It delegates this job to *Cranes*.
 A Crane is a Docker image, which implements the salvage Crane interface.
 After salvage has prepared all attached containers for backup, it instances a Crane to perform the actual backup.
 salvage will wait for the Crane to complete the backup, before reversing the performed *backup actions* on all containers, returning everything back to full operations.
 
-This design allows to backup volumes with most file-based backup solutions, while ensuring that these solution don't need to interface with docker directly.
+This design allows to back up volumes with most file-based backup solutions, while ensuring that these solution don't need to interface with docker directly.
 
 # Configuration
 
@@ -29,7 +32,7 @@ salvage is supposed to retrieve individual backup definitions by checking for ce
 
 ## Daemon configuration
 
-The daemon configuration is devided into environment variables and labels directly attached to the salvage container.
+The daemon configuration is divided into environment variables and labels directly attached to the salvage container.
 This might seem odd at first, but since the configuration of other containers and volumes is done via labels, configuring the same things on salvage via environment variables would feel very strange.
 
 The following environment variables are used to configure the daemon:
@@ -62,18 +65,65 @@ The following labels are used to configure a crane and need to present on the sa
 
 * `salvage.cranes.<name>.image`: The image of this crane.
 * `salvage.cranes.<name>.env.<key>`: Environment variables to pass to the crane. For example `salvage.cranes.<name>.env.S3_BUCKET=my-bucket`.
-* `salvage.cranes.<name>.mount.<volume>`: Mounts a volume to the crane. The volume will be mounted at the specified path. For exmaples `salvage.cranes.<name>.mount.my-volume=/cache`.
+* `salvage.cranes.<name>.mount.<volume>`: Mounts a volume to the crane. The volume will be mounted at the specified path. For exmaple `salvage.cranes.<name>.mount.my-volume=/cache`.
+ 
+**Note:** Crane volumes are resolved on a global level, so you need to reference the volume by its name on the docker daemon, not the name of the volume in the `volume` section of the compose file.
+
+**Note:** While no backup is in progress, no crane containers will exist on the docker daemon.
+This means volumes usually attached to crane containers, are not attached to anything and thus will appear as orphaned.
+Depending on how you run your docker host and what other processes interact with it, someone might delete these volumes.
+To prevent this, you can attach the volume to salve itself.
+In order to establish a stable mount point that will never clash with any future updates, please mount the volume at `/mnt/dummy/`.
+
+An example excerpt of a salvage container with a crane volume attached might look like this:
+
+```yaml
+version: '3.9'
+services:
+  salvage:
+    image: "ghcr.io/chrisliebaer/salvage:master"
+    environment:
+      - "MACHINE=my-machine"
+    # [ ... ]
+    labels:
+      - "salvage.root=true"
+      - "salvage.cranes.s3.image=..."
+      - "salvage.cranes.s3.env.S3_SECRET=..."
+      - "salvage.cranes.s3.env.S3_BUCKET=my-bucket"
+      # Note that the global volume name is used here
+      - "salvage.cranes.s3.mount.salvage-s3-cache=/cache"
+      # [ ... ]
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+        # Mount the volume to salvage to prevent it from being orphaned. Salvage will never use this mount.
+      - "s3-cache:/mnt/dummy/s3-cache:ro"
+    # [ ... ]
+
+volumes:
+  s3-cache:
+    external: true
+    name: salvage-s3-cache
+  # [ ... ]
+```
 
 ### Volume configuration
 
-By default, Salvage will ignore all volumes it hasn't been explicitly instructed to backup.
+By default, Salvage will ignore all volumes it hasn't been explicitly instructed to back up.
 In order to configure a volume for backup, you need to label it as such.
 Since changing labels on volumes is not supported by Docker, volumes are configured by attaching labels to containers instead (see FAQ).
 To do this, place the `salvage.tide.<name>=<volume1>,<volume2>,...` label on any container (it doesn't need to actually use the volume).
+This might seem a bit odd, especially since the volume is not actually used by the container, but the process of discovering volumes is decoupled from backup process that controls which containers need to be stopped of paused during backup.
+So while you could in theory attach the label to any container, it is recommended to attach it to the container that actually uses the volume.
+Just for the sake of clarity and maintainability.
+
 Salvage offers two ways of resolving the volume name:
 
 * `compose project scope`: The volume name is the same as the name of the volume in the compose project (resolved via docker compose labels on volume).
 * `global scope`: If volume name is prefixed with `g:` it will be resolved by the given name.
+
+This also allows you to back up volumes that are not part of any compose project by attaching the `salvage.tide.<name>=g:<volume>` label to the salvage container itself.
+What it does not allow you to do right now is also backing up host files that might be used by services via bind mounts.
+This use case is not supported right now, but might be added in the future.
 
 ### Container configuration
 
@@ -81,7 +131,7 @@ The following labels can be used on containers and will define how Salvage will 
 All modifications to a container's state will be reverted after the backup is done.
 Certain actions can only be performed on a container if the container is in a certain state.
 
-* `salvage.action`: Defines if the container state should be altered before backing up it's volumes. Possible values are:
+* `salvage.action`: Defines if the container state should be altered before backing up its volumes. Possible values are:
     * `ignore`: Container state will not be altered. (Default if either pre- or post-action is set).
     * `stop`: (Default if no pre- or post-action is set) The container will be stopped before the backup is performed. (Ignored if container is already stopped.)
     * `pause`: The container will be paused before the backup is performed. (Ignored if container is already paused or stopped.)
@@ -99,11 +149,29 @@ The following environment variables are passed to the crane:
 * `SALVAGE_VOLUME_NAME`: The name of the volume.
 * as well as any additional environment variables specified in the crane configuration.
 
-salvage will mount the volume at `/salvage/volume` (read-only) and include some meta data at `/salvage/meta`.
-The crane is expected to backup and restore both of these directories.
+salvage will mount the volume at `/salvage/volume` (read-only) and include some metadata at `/salvage/meta`.
+The crane is expected to back up and restore both of these directories.
 The content within the `/salvage/meta` directory is not part of the crane interface, and may change at any time.
 Do not rely on it.
 Any additional volumes will be mounted writable, as specified in the crane configuration.
+
+# Reporting and monitoring
+
+Salvage can be configured to call Discord webhooks on certain events.
+Configuration is done on a per-tide basis.
+The following labels can be used to configure Discord webhooks for a tide:
+
+* `salvage.tides.<name>.report.tide.success`: Called after a tide has been executed successfully.
+* `salvage.tides.<name>.report.tide.failure`: Called after a tide has failed, may provide affected volumes, if the docker daemon was reachable.
+* `salvage.tides.<name>.report.volume.success`: Called after a volume has been backed up successfully.
+* `salvage.tides.<name>.report.volume.failure`: Called after a volume backup has failed.
+* `salvage.tides.<name>.report.method`: The method to use for reporting. Can be `POST` or `GET`. Using `GET` will not deliver any payload. (Default is `POST`)
+
+# Troubleshooting
+
+Salvage will write logs to stdout using log4j2.
+If you are familiar with log4j2, you can override its configuration (see log4j2 documentation).
+Otherwise, you can set the `VERBOSE` environment variable to `true` to enable verbose logging.
 
 # Restrictions
 
@@ -115,6 +183,9 @@ Salvage attempts to minimize potential issues, but ultimately requires the host 
 ## Why not backup the volume directory from outside of containers?
 
 If you think that's a good idea go ahead and do it.
+Backing up the volume directory from outside of containers provides no means of stopping the container from modifying the volume while the backup is running.
+It also requires you to run a separate process on the host, which is not what we want in a pure Docker setup.
+Last but not least, you have to maintain container dependencies and volume configurations at two places, whereas with Salvage you can configure everything in the services `docker-compose.yml` file.
 
 ## Can I run multiple salvage instances on the same docker daemon?
 

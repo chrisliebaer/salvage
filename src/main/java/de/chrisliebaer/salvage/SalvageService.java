@@ -18,11 +18,18 @@ import de.chrisliebaer.salvage.entity.SalvageCrane;
 import de.chrisliebaer.salvage.entity.SalvageTide;
 import de.chrisliebaer.salvage.entity.SalvageVolume;
 import de.chrisliebaer.salvage.grouping.BackupGrouping;
+import de.chrisliebaer.salvage.reporting.CaptainHook;
+import de.chrisliebaer.salvage.reporting.FinishState;
+import de.chrisliebaer.salvage.reporting.TideLog;
+import de.chrisliebaer.salvage.reporting.VolumeLog;
+import de.chrisliebaer.salvage.reporting.WebhookReporter;
 import lombok.extern.log4j.Log4j2;
 import org.apache.logging.log4j.ThreadContext;
 
 import java.io.IOException;
+import java.net.http.HttpClient;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -43,6 +50,11 @@ public class SalvageService extends AbstractService {
 	private SalvageConfiguration configuration;
 	private final Thread serviceThread = new Thread(this::serviceThreadEntry, "SalvageService");
 	private String ownContainerId;
+	
+	private final HttpClient httpClient = HttpClient.newBuilder()
+			.version(HttpClient.Version.HTTP_1_1)
+			.connectTimeout(Duration.ofSeconds(10))
+			.build();
 	
 	@Override
 	protected void doStart() {
@@ -120,7 +132,7 @@ public class SalvageService extends AbstractService {
 			
 			// sleep for next execution
 			var duration = maybeDuration.get();
-			log.info("waiting for next tide '{}' in '{}'", tide.name(), formatDuration(duration));
+			log.info("waiting for next tide '{}' in '{}'", tide.name(), SalvageMain.formatDuration(duration));
 			try {
 				Thread.sleep(duration.toMillis());
 			} catch (InterruptedException e) {
@@ -129,14 +141,7 @@ public class SalvageService extends AbstractService {
 			}
 			
 			ThreadContext.put("tide", tide.name());
-			try {
-				executeTide(tide);
-			} catch (IOException e) {
-				log.error("failed to execute tide '{}'", tide.name(), e);
-			} catch (InterruptedException e) {
-				log.warn("tide '{}' was interrupted", tide.name());
-				Thread.currentThread().interrupt();
-			}
+			tideExceptionWrapped(tide);
 			ThreadContext.remove("tide");
 		}
 		log.info("exiting salvage service thread");
@@ -145,12 +150,40 @@ public class SalvageService extends AbstractService {
 		notifyStopped();
 	}
 	
-	private void executeTide(SalvageTide tide) throws IOException, InterruptedException {
+	/**
+	 * Wraps tide execution in handler logic for error reporting.
+	 *
+	 * @param tide tide to execute
+	 */
+	private void tideExceptionWrapped(SalvageTide tide) {
+		var hook = new WebhookReporter(tide.reportingUrlStore(), configuration.hostname(), httpClient);
+		var tideLog = new TideLog(tide, hook);
+		
+		var start = Instant.now();
+		try {
+			executeTide(tide, tideLog);
+		} catch (IOException e) {
+			log.error("failed to execute tide '{}'", tide.name(), e);
+			tideLog.failure(e);
+		} catch (InterruptedException e) {
+			log.warn("tide '{}' was interrupted, skipping reporting since JVM wants to shut down", tide.name());
+			Thread.currentThread().interrupt();
+			return;
+		} catch (Throwable e) {
+			log.error("unexpected error while executing tide '{}', please report this issue", tide.name(), e);
+			tideLog.failure("fatal error, check logs and report issue");
+		}
+		
+		doTideReporting(tideLog, hook);
+	}
+	
+	private void executeTide(SalvageTide tide, TideLog tideLog) throws IOException, InterruptedException {
 		log.info("executing tide '{}'", tide.name());
+		tideLog.start();
 		
 		try (var docker = createDefaultClient()) {
 			docker.pingCmd().exec();
-		
+			
 			// user might have run system prune, so recheck if cranes are still there
 			verifyCraneImage(docker, tide.crane());
 			
@@ -164,56 +197,101 @@ public class SalvageService extends AbstractService {
 				}
 			}
 			
-			// identify container depending to these volumes
+			// identify container depending on these volumes
 			var containers = docker.listContainersCmd()
 					.withFilter("volume", volumes.keySet()).exec().stream()
 					.map(c -> docker.inspectContainerCmd(c.getId()).exec())
 					.map(c -> SalvageContainer.fromContainer(c, volumes))
 					.collect(Collectors.toList());
 			
-			// remove ourself, since we never want to touch our own container (only happens if user is actually stupid)
+			// remove ourselves, since we never want to touch our own container (only happens if user is actually stupid)
 			containers.removeIf(c -> c.id().equals(ownContainerId));
 			
 			log.info("found {} containers depending on tide '{}'", containers.size(), tide.name());
 			if (log.isDebugEnabled()) {
 				for (var container : containers) {
-					log.debug("\t- found container {}", container.id());
+					log.debug("\t- found container {}", container.name());
 				}
 			}
 			
 			// group tide into waves to minimize downtime
 			var groups = BackupGrouping.groups(containers, volumes, tide.groupingMode());
-			log.info("grouping tide into {} waves", groups.size());
+			log.debug("grouping tide into {} waves", groups.size());
 			if (log.isDebugEnabled()) {
 				for (int i = 0; i < groups.size(); i++) {
 					var group = groups.get(i);
 					log.debug("\t- group no. {} with {} containers and {} volumes:", i, group.containers().size(), group.volumes().size());
 					for (var container : group.containers())
-						log.trace("\t\t- container {}", container.id());
+						log.trace("\t\t- container {}", container.name());
 					for (var volume : group.volumes())
 						log.trace("\t\t- volume {}", volume.name());
 				}
 			}
 			
-			// instance worker pool for backup, which can be reused for all groups
 			var hostMeta = new BackupMeta.HostMeta(System.currentTimeMillis(), configuration.hostname());
-			try (var operation = new BackupOperation(docker, tide.maxConcurrent(), configuration.cranes().values(), hostMeta);) {
+			
+			// instance worker pool for backup, which can be reused for all groups
+			try (var operation = new BackupOperation(docker, tide.maxConcurrent(), configuration.cranes().values(), hostMeta, tideLog)) {
 				// backup each group individually but in series
 				for (int i = 0; i < groups.size(); i++) {
 					BackupGrouping.Group group = groups.get(i);
-					log.info("starting backup of group no. {} with {} containers and {} volumes", i, group.containers().size(), group.volumes().size());
+					log.debug("starting backup of group no. {} with {} containers and {} volumes", i, group.containers().size(), group.volumes().size());
 					
-					// prepare containers for backup using transaction tracking to provide best effort in restoring container state in all circumstances
+					// prepare containers for backup using transaction tracking to provide the best effort in restoring container state in all circumstances
 					try (var transaction = new StateTransaction(docker)) {
 						backupGroup(tide, operation, group, transaction);
 						
-						// TODO if interrupted abort tide
+						// TODO if interrupted abort tide, probably should cancel vessel as well
 					}
 					
-					log.info("finish backup of group no. {} with {} containers and {} volumes", i, group.containers().size(), group.volumes().size());
+					log.debug("finish backup of group no. {} with {} containers and {} volumes", i, group.containers().size(), group.volumes().size());
 				}
 			}
 		}
+		
+		tideLog.success();
+	}
+	
+	private static void doTideReporting(TideLog tideLog, CaptainHook hook) {
+		var tideResult = tideLog.tideResult();
+		
+		// volume list will not always be present, depending on the reason the tide failed, logging needs to be aware of that
+		var volumes = tideLog.volumeLogs().stream().map(VolumeLog::volume).toList();
+		
+		if (tideResult.state() == FinishState.SUCCESS) {
+			if (volumes.isEmpty()) {
+				log.info("tide '{}' successfully finished, but no volumes are assigned to tide", tideLog.tide().name());
+			} else {
+				var volumesStr = volumes.stream().map(SalvageVolume::name).collect(Collectors.joining(", "));
+				log.info("tide '{}' successfully finished back up volumes: {}", tideLog.tide().name(), volumesStr);
+			}
+			
+			hook.reportTideSuccess(tideLog.tide(), volumes, tideLog.stopWatch().duration());
+			return;
+		}
+		
+		// tide encountered issues, check how many volumes were successfully backed up
+		var successfulVolumes = tideLog.volumeLogs().stream().filter(v -> v.state() == FinishState.SUCCESS).map(VolumeLog::volume).toList();
+		var failedVolumes = tideLog.volumeLogs().stream().filter(v -> v.state() == FinishState.FAILURE).map(VolumeLog::volume).toList();
+		
+		if (!failedVolumes.isEmpty() || !successfulVolumes.isEmpty()) {
+			// due to how tide volumes are requested, if there is at least one volume, we can assume that all volumes are present
+			var successfulVolumesStr = successfulVolumes.stream().map(SalvageVolume::name).collect(Collectors.joining(", "));
+			var failedVolumesStr = failedVolumes.stream().map(SalvageVolume::name).collect(Collectors.joining(", "));
+			log.error(
+					"tide '{}' failed partially. successfully backed up volumes: {}, failed volumes: {} (reason: {})",
+					tideLog.tide().name(),
+					successfulVolumesStr,
+					failedVolumesStr,
+					tideResult.message());
+			hook.reportTideFailure(tideLog.tide(), successfulVolumes, failedVolumes, tideResult.message(), tideLog.stopWatch().duration());
+		} else {
+			// tide failed before any volumes were indexed
+			log.error("tide '{}' failed (reason: {})", tideLog.tide().name(), tideResult.message());
+			hook.reportTideFailure(tideLog.tide(), tideResult.message(), tideLog.stopWatch().duration());
+		}
+		
+		// report for individual volumes is done in the volume log itself in order to have them closer to the actual time the volume was backed up
 	}
 	
 	private static void backupGroup(SalvageTide tide, BackupOperation operation, BackupGrouping.Group group, StateTransaction transaction) {
@@ -223,8 +301,8 @@ public class SalvageService extends AbstractService {
 		// if an error occurs during preperation we can simply abort the whole backup
 		try {
 			for (var container : containers) {
-				ThreadContext.put("container", container.id());
-				log.debug("preparing container {} for backup", container.id());
+				ThreadContext.put("container", container.name());
+				log.debug("preparing container {} for backup", container.name());
 				transaction.prepare(container);
 			}
 		} catch (InterruptedException e) {
@@ -247,11 +325,11 @@ public class SalvageService extends AbstractService {
 		// error during finish state on containers need to be ignored, since we might be able to recover some containers
 		for (var container : containers) {
 			try {
-				ThreadContext.put("container", container.id());
-				log.debug("restoring container {} to previous state", container.id());
+				ThreadContext.put("container", container.name());
+				log.debug("restoring container {} to previous state", container.name());
 				transaction.restore(container);
 			} catch (Throwable e) {
-				log.warn("failed to restore post backup state for tide '{}' and container '{}'", tide.name(), container.id(), e);
+				log.warn("failed to restore post backup state for tide '{}' and container '{}'", tide.name(), container.name(), e);
 			} finally {
 				ThreadContext.remove("container");
 			}
@@ -262,7 +340,7 @@ public class SalvageService extends AbstractService {
 		Optional<Duration> nextDuration = Optional.empty();
 		SalvageTide nextTide = null;
 		
-		// find tide with closest execution time
+		// find tide with the closest execution time
 		var tides = configuration.tides();
 		for (var tide : tides) {
 			var next = ExecutionTime.forCron(tide.cron());
@@ -294,14 +372,6 @@ public class SalvageService extends AbstractService {
 				.dockerHost(config.getDockerHost())
 				.build();
 		return DockerClientImpl.getInstance(config, httpClient);
-	}
-	
-	private static String formatDuration(Duration duration) {
-		// https://stackoverflow.com/a/40487511/1834100
-		return duration.toString()
-				.substring(2)
-				.replaceAll("(\\d[HMS])(?!$)", "$1 ")
-				.toLowerCase();
 	}
 	
 	private static void cleanupLeftOver(DockerClient docker) {
@@ -382,7 +452,7 @@ public class SalvageService extends AbstractService {
 	 */
 	private static String getOwnContainerId(DockerClient docker) {
 		
-		// we also check of stopped container since there is no situation where these are a good idea
+		// we also check for stopped container since there is no situation where these are a good idea
 		var containers = docker.listContainersCmd()
 				.withShowAll(true)
 				.withLabelFilter(List.of(ROOT_LABEL))
@@ -391,7 +461,7 @@ public class SalvageService extends AbstractService {
 		if (containers.isEmpty())
 			throw new IllegalStateException("no container with label '" + ROOT_LABEL + "' found");
 		if (containers.size() > 1)
-			throw new IllegalStateException("multiple containers with label '" + ROOT_LABEL + "' found, check if you have older containers existing");
+			throw new IllegalStateException("multiple containers with label '" + ROOT_LABEL + "' found, check if older containers exist");
 		
 		return containers.get(0).getId();
 	}

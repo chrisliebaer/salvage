@@ -1,0 +1,26 @@
+{
+	"username": "Salvage Daemon (${host})",
+	"avatar_url": "${avatar}",
+	"embeds": [
+		{
+			"title": "Volume `${volume}` failed!",
+			"description": "```\n${exception}\n```",
+			"color": 13965079,
+			"fields": [
+				{
+					"name": "Duration",
+					"value": "${duration}",
+					"inline": true
+				},
+				{
+					"name": "Crane",
+					"value": "${crane}",
+					"inline": true
+				}
+			],
+			"footer": {
+				"text": "${host}"
+			}
+		}
+	]
+}

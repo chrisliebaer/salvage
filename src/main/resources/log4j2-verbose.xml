@@ -11,7 +11,7 @@
 		<Logger name="org.apache.hc" level="INFO"/>
 		<Logger name="com.github.dockerjava" level="INFO"/>
 		
-		<Root level="INFO">
+		<Root level="TRACE">
 			<AppenderRef ref="Console"/>
 		</Root>
 	</Loggers>

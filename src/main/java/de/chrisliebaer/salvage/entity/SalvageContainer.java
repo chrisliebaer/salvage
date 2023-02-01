@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-public record SalvageContainer(String id, Optional<String> project, List<SalvageVolume> volumes,
+public record SalvageContainer(String id, String name, Optional<String> project, List<SalvageVolume> volumes,
 							   ContainerAction action, Optional<ContainerCommand> commandPre, Optional<ContainerCommand> commandPost) {
 	
 	private static final String LABEL_CONTAINER_ACTION = "salvage.action";
@@ -76,7 +76,7 @@ public record SalvageContainer(String id, Optional<String> project, List<Salvage
 				usedVolumes.add(volume);
 		}
 		
-		return new SalvageContainer(container.getId(), project, usedVolumes, action, preCommand, postCommand);
+		return new SalvageContainer(container.getId(), container.getName(), project, usedVolumes, action, preCommand, postCommand);
 	}
 	
 	private static String[] translateCommandline(String command) {

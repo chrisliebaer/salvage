@@ -43,7 +43,7 @@ public record ContainerCommand(List<String> command, String user) {
 		var execInspect = client.inspectExecCmd(exec.getId()).exec();
 		var exitCode = execInspect.getExitCodeLong();
 		if (exitCode == null) {
-			throw new IllegalStateException("execution of command in container " + container.id() + " failed");
+			throw new IllegalStateException("execution of command in container " + container.name() + " failed");
 		}
 		return exitCode;
 	}

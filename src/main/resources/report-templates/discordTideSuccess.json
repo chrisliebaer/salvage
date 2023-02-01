@@ -1,0 +1,21 @@
+{
+	"username": "Salvage Daemon (${host})",
+	"avatar_url": "${avatar}",
+	"embeds": [
+		{
+			"title": "Tide `${tide}` completed!",
+			"description": "The following volumes have been saved: ${volumes}",
+			"color": 1561887,
+			"fields": [
+				{
+					"name": "Duration",
+					"value": "${duration}",
+					"inline": true
+				}
+			],
+			"footer": {
+				"text": "${host}"
+			}
+		}
+	]
+}
