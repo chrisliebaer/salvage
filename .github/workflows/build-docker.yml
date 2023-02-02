@@ -60,7 +60,7 @@ jobs:
       # Hotfix for https://github.com/docker/metadata-action/issues/212
       - name: Remove prefix from tags
         id: meta_hotfix
-        run: echo echo "fixed_tags=${{ steps.meta.outputs.tags }}" | sed 's;${{ env.IMAGE_NAME }}:;;g' >> $GITHUB_ENV
+        run: echo "fixed_tags=${{ steps.meta.outputs.tags }}" | sed 's;${{ env.IMAGE_NAME }}:;;g' >> $GITHUB_ENV
 
       - name: Build and Publish Docker Image
         run: |
