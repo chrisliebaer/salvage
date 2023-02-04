@@ -60,6 +60,10 @@ The following labels are used to configure a tide and need to present on the sal
 ### Crane configuration
 
 A crane is an image that implements the salvage Crane interface.
+The only cranes currently available are the ones that I'm using for myself.
+But since salvage does most of the heavy lifting, writing a crane for your backup software of choice should be simple.
+
+Check [salvage-cranes](https://github.com/chrisliebaer/salvage-crane) for available cranes.
 
 The following labels are used to configure a crane and need to present on the salvage container:
 
