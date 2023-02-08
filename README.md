@@ -1,5 +1,8 @@
-# WARNING: Work in progress! Very unstable, not ready for anything larger than a calculator.
-Also, there aren't really any crane implementations yet, other than the one I use for my own infrastructure.
+# Work in progress!
+I'm currently using salvage in production, and I am not aware of any issues other than the open issues.
+I don't know about bugs that could cause catastrophic failure but keep in mind that many configurations might not have been tested.
+Salvage itself does currently not issue any volume deletion commands, so complete data loss is not possible.
+Also, there aren't really any crane implementations yet, other than the one I use for my own infrastructure, which you can find below in the crane section.
 
 ![Salvage Logo](https://raw.githubusercontent.com/chrisliebaer/salvage/master/logo.png)
 
@@ -155,6 +158,7 @@ The following environment variables are passed to the crane:
 
 salvage will mount the volume at `/salvage/volume` (read-only) and include some metadata at `/salvage/meta`.
 The crane is expected to back up and restore both of these directories.
+**All cranes are required to contain the `/salvage/volume` and `/salvage/meta` directories in their image as otherwise volume access will fail in certain SELinux environments.**
 The content within the `/salvage/meta` directory is not part of the crane interface, and may change at any time.
 Do not rely on it.
 Any additional volumes will be mounted writable, as specified in the crane configuration.
