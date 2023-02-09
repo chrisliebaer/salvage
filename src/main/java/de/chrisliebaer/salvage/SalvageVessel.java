@@ -82,7 +82,7 @@ public class SalvageVessel {
 						.withAutoRemove(true)
 						.withBinds(prepareBinds()))
 				.exec();
-		log.debug("created container '{}' for crane '{}' to backup volume '{}'", container.getId(), crane, volume);
+		log.info("created container '{}' for crane '{}' to backup volume '{}'", container.getId(), crane, volume);
 		
 		try {
 			startBackupContainer(container);
