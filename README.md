@@ -1,5 +1,8 @@
-# WARNING: Work in progress! Very unstable, not ready for anything larger than a calculator.
-Also, there aren't really any crane implementations yet, other than the one I use for my own infrastructure.
+# Work in progress!
+I'm currently using salvage in production, and I am not aware of any issues other than the open issues.
+I don't know about bugs that could cause catastrophic failure but keep in mind that many configurations might not have been tested.
+Salvage itself does currently not issue any volume deletion commands, so complete data loss is not possible.
+Also, there aren't really any crane implementations yet, other than the one I use for my own infrastructure, which you can find below in the crane section.
 
 ![Salvage Logo](https://raw.githubusercontent.com/chrisliebaer/salvage/master/logo.png)
 
@@ -60,10 +63,15 @@ The following labels are used to configure a tide and need to present on the sal
 ### Crane configuration
 
 A crane is an image that implements the salvage Crane interface.
+The only cranes currently available are the ones that I'm using for myself.
+But since salvage does most of the heavy lifting, writing a crane for your backup software of choice should be simple.
+
+Check [salvage-cranes](https://github.com/chrisliebaer/salvage-crane) for available cranes.
 
 The following labels are used to configure a crane and need to present on the salvage container:
 
 * `salvage.cranes.<name>.image`: The image of this crane.
+* `salvage.cranes.<name>.pullOnRun`: Whether to pull the image before running the crane, regardless of whether it is already present on the docker daemon. Defaults to `false`.
 * `salvage.cranes.<name>.env.<key>`: Environment variables to pass to the crane. For example `salvage.cranes.<name>.env.S3_BUCKET=my-bucket`.
 * `salvage.cranes.<name>.mount.<volume>`: Mounts a volume to the crane. The volume will be mounted at the specified path. For exmaple `salvage.cranes.<name>.mount.my-volume=/cache`.
  
@@ -151,6 +159,7 @@ The following environment variables are passed to the crane:
 
 salvage will mount the volume at `/salvage/volume` (read-only) and include some metadata at `/salvage/meta`.
 The crane is expected to back up and restore both of these directories.
+**All cranes are required to contain the `/salvage/volume` and `/salvage/meta` directories in their image as otherwise volume access will fail in certain SELinux environments.**
 The content within the `/salvage/meta` directory is not part of the crane interface, and may change at any time.
 Do not rely on it.
 Any additional volumes will be mounted writable, as specified in the crane configuration.
