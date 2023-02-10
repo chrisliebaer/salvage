@@ -65,12 +65,12 @@ jobs:
       # Hotfix for https://github.com/docker/metadata-action/issues/212
       - name: Remove prefix from tags
         id: meta_hotfix
-        run: echo "::set-output name=tags::$(echo ${{ steps.meta.outputs.tags }} | sed 's;${{ env.IMAGE_NAME }}:;;g')"
+        run: echo "fixed_tags=${{ steps.meta.outputs.tags }}" | sed 's;${{ env.IMAGE_NAME }}:;;g' >> $GITHUB_ENV
 
       - name: Build and Publish Docker Image
         run: |
           gradle jib \
-            -Djib.to.tags="${{ steps.meta_hotfix.outputs.tags }}" \
+            -Djib.to.tags="${{ env.fixed_tags }}" \
             -Djib.container.labels="${{ steps.meta.outputs.labels }}" \
             -Djib.console=plain \
             --image="ghcr.io/${{ github.repository }}"
