@@ -1,6 +1,5 @@
 package de.chrisliebaer.salvage;
 
-import com.cronutils.model.time.ExecutionTime;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.command.InspectVolumeResponse;
@@ -36,7 +35,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Log4j2
@@ -119,49 +117,43 @@ public class SalvageService extends AbstractService {
 	}
 	
 	private void loop() {
-		// in very rare cases we might miss a tide by a few seconds as this loop is spending cycles while time continues to pass, keeping ref to last check prevents this
-		var nowRef = ZonedDateTime.now();
+		var tides = new ArrayList<NextTideExecution>();
+		for (var tide : configuration.tides()) {
+			tides.add(new NextTideExecution(tide, tide.nextExecution(ZonedDateTime.now())));
+		}
+		
+		// empty tides should be picked up during configuration load, but we check again in case of code changes
+		if (tides.isEmpty()) {
+			notifyFailed(new IllegalStateException("no tides configured, nothing to do"));
+			return;
+		}
 		
 		while (!Thread.interrupted()) {
+			tides.sort(Comparator.comparing(NextTideExecution::time));
 			
-			// get schedule for all tides
-			var maybeSchedule = TideCronSchedule.fromTides(configuration.tides(), nowRef);
-			if (maybeSchedule.isEmpty()) {
-				notifyFailed(new IllegalStateException("no tides have any future execution, nothing to do"));
-				return;
-			}
-			var schedule = maybeSchedule.get();
+			// remove first tide from list (will be added again after execution but with new execution time)
+			var nextExecution = tides.remove(0);
+			var tide = nextExecution.tide();
 			
 			// sleep for next execution
-			var next = schedule.next();
+			var duration = Duration.between(ZonedDateTime.now(), nextExecution.time());
+			duration = duration.isNegative() ? Duration.ZERO : duration;
 			
-			var duration = Duration.between(ZonedDateTime.now(), next);
-			log.info("waiting for next tide '{}' in '{}'", schedule.tides.get(0), SalvageMain.formatDuration(duration));
+			log.info("waiting for next tide '{}' in '{}'", tide.name(), SalvageMain.formatDuration(duration));
 			try {
-				// due to imprecise sleep, the first tide might not be due when the sleep ends, therefore we add a small buffer
-				Thread.sleep(duration.toMillis() + 5000);
+				// to prevent double execution, we add 5 seconds to the duration
+				Thread.sleep(Math.max(duration.toMillis(), 0) + 5000);
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 				continue;
 			}
 			
-			// in order to not miss any tide, we iterate over all tides until no more tides are due between the start of this loop and the current time
-			for (var tideExecution : schedule.tides()) {
-				var tide = tideExecution.tide();
-				
-				// update nowRef to current time
-				nowRef = ZonedDateTime.now();
-				
-				var due = tideExecution.time();
-				if (due.isBefore(nowRef)) {
-					log.info("executing tide '{}'", tide.name());
-					ThreadContext.put("tide", tide.name());
-					tideExceptionWrapped(tide);
-					ThreadContext.remove("tide");
-				}
-				
-				// we are not updating nowRef here, as we want to make sure we do not miss any tides that are due between now and the next check
-			}
+			ThreadContext.put("tide", tide.name());
+			tideExceptionWrapped(tide);
+			ThreadContext.remove("tide");
+			
+			// add tide with next execution time to list
+			tides.add(new NextTideExecution(tide, tide.nextExecution(ZonedDateTime.now())));
 		}
 		log.info("exiting salvage service thread");
 		Thread.currentThread().interrupt();
@@ -455,28 +447,5 @@ public class SalvageService extends AbstractService {
 		return containers.get(0).getId();
 	}
 	
-	private record TideCronSchedule(ZonedDateTime next, List<NextTideExecution> tides) {
-		
-		private record NextTideExecution(SalvageTide tide, ZonedDateTime time) {}
-		
-		private static Optional<TideCronSchedule> fromTides(List<SalvageTide> tides, ZonedDateTime now) {
-			var schedule = new ArrayList<NextTideExecution>();
-			for (var tide : tides) {
-				var executionTime = ExecutionTime.forCron(tide.cron());
-				var nextTime = executionTime.nextExecution(now);
-				if (nextTime.isEmpty()) {
-					log.warn("tide '{}' has no future execution time, ignoring", tide.name());
-					continue;
-				}
-				schedule.add(new NextTideExecution(tide, nextTime.get()));
-			}
-			
-			if (schedule.isEmpty())
-				return Optional.empty();
-			
-			schedule.sort(Comparator.comparing(NextTideExecution::time));
-			return Optional.of(new TideCronSchedule(schedule.get(0).time, schedule));
-		}
-	}
-
+	private record NextTideExecution(SalvageTide tide, ZonedDateTime time) {}
 }

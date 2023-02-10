@@ -56,6 +56,10 @@ public record SalvageConfiguration(String hostname, String ownContainerId, List<
 			log.debug("loaded tide '{}'", tide);
 		}
 		
+		if (tides.isEmpty()) {
+			throw new IllegalArgumentException("tried to construct configuration, but no tides were specified");
+		}
+		
 		return new SalvageConfiguration(hostname, container.getId(), tides, cranes);
 	}
 }

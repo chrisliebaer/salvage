@@ -3,9 +3,11 @@ package de.chrisliebaer.salvage.entity;
 import com.cronutils.model.Cron;
 import com.cronutils.model.CronType;
 import com.cronutils.model.definition.CronDefinitionBuilder;
+import com.cronutils.model.time.ExecutionTime;
 import com.cronutils.parser.CronParser;
 
 import java.net.URISyntaxException;
+import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -56,6 +58,10 @@ public record SalvageTide(String name, SalvageCrane crane, GroupingMode grouping
 	private static final String LABEL_TIDE_GROUPING_SUFFIX = ".grouping";
 	private static final String LABEL_TIDE_CRANE_SUFFIX = ".crane";
 	private static final String LABEL_TIDE_MAX_CONCURRENT_SUFFIX = ".maxConcurrent";
+	
+	public ZonedDateTime nextExecution(ZonedDateTime now) {
+		return ExecutionTime.forCron(cron).nextExecution(now).orElseThrow(() -> new IllegalStateException("tide '" + name + "' has no next execution time"));
+	}
 	
 	public static SalvageTide fromLabels(String name, String prefix, Map<String, String> labels, HashMap<String, SalvageCrane> cranes) {
 		var cronExpression = labels.get(prefix + LABEL_TIDE_CRON_SUFFIX);

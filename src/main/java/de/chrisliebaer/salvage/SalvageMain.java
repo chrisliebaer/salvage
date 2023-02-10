@@ -62,6 +62,9 @@ public enum SalvageMain {
 	}
 	
 	public static String formatDuration(Duration duration) {
+		if (duration.isZero())
+			return "now";
+		
 		// https://stackoverflow.com/a/40487511/1834100
 		return duration.toString()
 				.substring(2)
