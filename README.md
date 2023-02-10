@@ -71,6 +71,7 @@ Check [salvage-cranes](https://github.com/chrisliebaer/salvage-crane) for availa
 The following labels are used to configure a crane and need to present on the salvage container:
 
 * `salvage.cranes.<name>.image`: The image of this crane.
+* `salvage.cranes.<name>.pullOnRun`: Whether to pull the image before running the crane, regardless of whether it is already present on the docker daemon. Defaults to `false`.
 * `salvage.cranes.<name>.env.<key>`: Environment variables to pass to the crane. For example `salvage.cranes.<name>.env.S3_BUCKET=my-bucket`.
 * `salvage.cranes.<name>.mount.<volume>`: Mounts a volume to the crane. The volume will be mounted at the specified path. For exmaple `salvage.cranes.<name>.mount.my-volume=/cache`.
  

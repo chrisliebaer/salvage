@@ -101,10 +101,13 @@ public class SalvageService extends AbstractService {
 		try {
 			var image = docker.inspectImageCmd(crane.image()).exec();
 			log.trace("found the following image for crane {}: {}", crane.name(), image.getRepoTags());
-			return;
+			
+			// if crane does not require pull, we are done, otherwise we need to check if image is up-to-date
+			if (!crane.pullOnRun())
+				return;
 		} catch (NotFoundException ignore) {}
 		
-		log.info("missing image '{}' for crane '{}', pulling it now", crane.image(), crane.name());
+		log.info("missing image or pull on run required: '{}' for crane '{}', pulling it now", crane.image(), crane.name());
 		var callback = docker.pullImageCmd(crane.image()).exec(new PullImageResultCallback());
 		try {
 			callback.awaitCompletion();

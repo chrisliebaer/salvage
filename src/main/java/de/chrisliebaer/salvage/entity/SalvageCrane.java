@@ -3,9 +3,10 @@ package de.chrisliebaer.salvage.entity;
 import java.util.HashMap;
 import java.util.Map;
 
-public record SalvageCrane(String name, String image, Map<String, String> env, Map<String, String> mounts, int maxConcurrent) {
+public record SalvageCrane(String name, String image, boolean pullOnRun, Map<String, String> env, Map<String, String> mounts, int maxConcurrent) {
 	
 	private static final String LABEL_SALVAGE_IMAGE_SUFFIX = ".image";
+	private static final String LABEL_PULL_ON_RUN = ".pullOnRun";
 	private static final String LABEL_SALVAGE_ENV = ".env.";
 	private static final String LABEL_SALVAGE_MOUNT = ".mount.";
 	private static final String LABEL_SALVAGE_MAX_CONCURRENT = ".maxConcurrent";
@@ -14,6 +15,8 @@ public record SalvageCrane(String name, String image, Map<String, String> env, M
 		var image = labels.get(prefix + LABEL_SALVAGE_IMAGE_SUFFIX);
 		if (image == null)
 			throw new IllegalArgumentException("tried to construct crane '" + name + "', but no image was specified");
+		
+		var pullOnRun = Boolean.parseBoolean(labels.get(prefix + LABEL_PULL_ON_RUN));
 		
 		var env = new HashMap<String, String>();
 		var mounts = new HashMap<String, String>();
@@ -35,6 +38,6 @@ public record SalvageCrane(String name, String image, Map<String, String> env, M
 		try {
 			maxConcurrent = Integer.parseInt(labels.get(prefix + LABEL_SALVAGE_MAX_CONCURRENT));
 		} catch (NumberFormatException ignore) {}
-		return new SalvageCrane(name, image, env, mounts, maxConcurrent);
+		return new SalvageCrane(name, image, pullOnRun, env, mounts, maxConcurrent);
 	}
 }
