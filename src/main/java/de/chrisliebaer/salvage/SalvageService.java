@@ -31,6 +31,8 @@ import java.net.http.HttpClient;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -117,35 +119,49 @@ public class SalvageService extends AbstractService {
 	}
 	
 	private void loop() {
+		// in very rare cases we might miss a tide by a few seconds as this loop is spending cycles while time continues to pass, keeping ref to last check prevents this
+		var nowRef = ZonedDateTime.now();
 		
 		while (!Thread.interrupted()) {
 			
-			var maybeTide = getNextExecutionTide();
-			if (maybeTide.isEmpty()) {
-				log.warn("no tide specifies future execution time, nothing to do");
-				break;
+			// get schedule for all tides
+			var maybeSchedule = TideCronSchedule.fromTides(configuration.tides(), nowRef);
+			if (maybeSchedule.isEmpty()) {
+				notifyFailed(new IllegalStateException("no tides have any future execution, nothing to do"));
+				return;
 			}
-			
-			var tide = maybeTide.get();
-			var maybeDuration = ExecutionTime.forCron(tide.cron()).timeToNextExecution(ZonedDateTime.now());
-			if (maybeDuration.isEmpty()) {
-				// race condition, if last execution just passed us, retry
-				continue;
-			}
+			var schedule = maybeSchedule.get();
 			
 			// sleep for next execution
-			var duration = maybeDuration.get();
-			log.info("waiting for next tide '{}' in '{}'", tide.name(), SalvageMain.formatDuration(duration));
+			var next = schedule.next();
+			
+			var duration = Duration.between(ZonedDateTime.now(), next);
+			log.info("waiting for next tide '{}' in '{}'", schedule.tides.get(0), SalvageMain.formatDuration(duration));
 			try {
-				Thread.sleep(duration.toMillis());
+				// due to imprecise sleep, the first tide might not be due when the sleep ends, therefore we add a small buffer
+				Thread.sleep(duration.toMillis() + 5000);
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 				continue;
 			}
 			
-			ThreadContext.put("tide", tide.name());
-			tideExceptionWrapped(tide);
-			ThreadContext.remove("tide");
+			// in order to not miss any tide, we iterate over all tides until no more tides are due between the start of this loop and the current time
+			for (var tideExecution : schedule.tides()) {
+				var tide = tideExecution.tide();
+				
+				// update nowRef to current time
+				nowRef = ZonedDateTime.now();
+				
+				var due = tideExecution.time();
+				if (due.isBefore(nowRef)) {
+					log.info("executing tide '{}'", tide.name());
+					ThreadContext.put("tide", tide.name());
+					tideExceptionWrapped(tide);
+					ThreadContext.remove("tide");
+				}
+				
+				// we are not updating nowRef here, as we want to make sure we do not miss any tides that are due between now and the next check
+			}
 		}
 		log.info("exiting salvage service thread");
 		Thread.currentThread().interrupt();
@@ -339,36 +355,6 @@ public class SalvageService extends AbstractService {
 		}
 	}
 	
-	private Optional<SalvageTide> getNextExecutionTide() {
-		Optional<Duration> nextDuration = Optional.empty();
-		SalvageTide nextTide = null;
-		
-		// find tide with the closest execution time
-		var tides = configuration.tides();
-		for (var tide : tides) {
-			var next = ExecutionTime.forCron(tide.cron());
-			var maybeDuration = next.timeToNextExecution(ZonedDateTime.now());
-			if (maybeDuration.isEmpty()) {
-				log.warn("tide does not contain any future executions: {}", tide.cron().asString());
-				continue;
-			}
-			
-			var duration = maybeDuration.get();
-			if (nextDuration.isPresent()) {
-				if (duration.compareTo(nextDuration.get()) < 0) {
-					nextDuration = Optional.of(duration);
-					nextTide = tide;
-				}
-			} else {
-				nextDuration = Optional.of(duration);
-				nextTide = tide;
-			}
-		}
-		
-		var finalNextTide = nextTide;
-		return nextDuration.map(duration -> finalNextTide);
-	}
-	
 	private static DockerClient createDefaultClient() {
 		var config = DefaultDockerClientConfig.createDefaultConfigBuilder().build();
 		DockerHttpClient httpClient = new ApacheDockerHttpClient.Builder()
@@ -468,4 +454,29 @@ public class SalvageService extends AbstractService {
 		
 		return containers.get(0).getId();
 	}
+	
+	private record TideCronSchedule(ZonedDateTime next, List<NextTideExecution> tides) {
+		
+		private record NextTideExecution(SalvageTide tide, ZonedDateTime time) {}
+		
+		private static Optional<TideCronSchedule> fromTides(List<SalvageTide> tides, ZonedDateTime now) {
+			var schedule = new ArrayList<NextTideExecution>();
+			for (var tide : tides) {
+				var executionTime = ExecutionTime.forCron(tide.cron());
+				var nextTime = executionTime.nextExecution(now);
+				if (nextTime.isEmpty()) {
+					log.warn("tide '{}' has no future execution time, ignoring", tide.name());
+					continue;
+				}
+				schedule.add(new NextTideExecution(tide, nextTime.get()));
+			}
+			
+			if (schedule.isEmpty())
+				return Optional.empty();
+			
+			schedule.sort(Comparator.comparing(NextTideExecution::time));
+			return Optional.of(new TideCronSchedule(schedule.get(0).time, schedule));
+		}
+	}
+
 }
