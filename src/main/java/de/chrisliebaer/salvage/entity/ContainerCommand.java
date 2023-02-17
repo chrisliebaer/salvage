@@ -32,7 +32,7 @@ public record ContainerCommand(List<String> command, String user) {
 		
 		// and then run it
 		var callback = client.execStartCmd(exec.getId())
-				.withDetach(false) // always stay attached so we get to know when process exits
+				.withDetach(false) // always stay attached, so we get to know when process exits
 				.exec(new FrameCallback(frame -> {
 					var line = new String(frame.getPayload(), StandardCharsets.UTF_8).trim();
 					log.trace("[exec] {}", line);
@@ -42,9 +42,11 @@ public record ContainerCommand(List<String> command, String user) {
 		// check exit code
 		var execInspect = client.inspectExecCmd(exec.getId()).exec();
 		var exitCode = execInspect.getExitCodeLong();
-		if (exitCode == null) {
+		if (exitCode == null)
 			throw new IllegalStateException("execution of command in container " + container.name() + " failed");
-		}
+		if (exitCode != 0)
+			log.warn("execution of command in container {} failed with exit code {}", container.name(), exitCode);
+		
 		return exitCode;
 	}
 }
