@@ -101,7 +101,7 @@ services:
     image: "ghcr.io/chrisliebaer/salvage:master"
     environment:
       - "MACHINE=my-machine"
-        # [ ... ]
+      # [ ... ]
     labels:
       - "salvage.root=true"
       - "salvage.cranes.s3.image=..."
@@ -230,6 +230,21 @@ Backup configuration should not require risky volume operations.
 You can, but I hope you know what you are doing and have checked if the crane supports this as well.
 </details>
 
+<details>
+	<summary>Error when running crane: '/salvage/volume/': Permission denied</summary>
+
+This is a known issue with empty volumes.
+Before mounting a volume to a container, Docker will copy the content of the mount point into the volume.
+This behavior ignores the `read-only` flag and can be disabled by setting the `nocopy` option, which is exactly what salvage does.
+However, if the volume is empty, the mounted path will not be accessible by the container, making the backup fail.
+The workaround is to create a dummy file in the volume before running salvage.
+
+You can run the following command to create a dummy file in the volume:
+
+```bash
+docker run --rm -v VOLUMENAME:/mnt alpine touch /mnt/.salvage_workaround
+```
+</details>
 
 # Contributing
 
