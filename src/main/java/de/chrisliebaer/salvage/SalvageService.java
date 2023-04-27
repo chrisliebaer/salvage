@@ -22,6 +22,7 @@ import de.chrisliebaer.salvage.reporting.FinishState;
 import de.chrisliebaer.salvage.reporting.TideLog;
 import de.chrisliebaer.salvage.reporting.VolumeLog;
 import de.chrisliebaer.salvage.reporting.WebhookReporter;
+import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
 import org.apache.logging.log4j.ThreadContext;
 
@@ -46,6 +47,11 @@ public class SalvageService extends AbstractService {
 	
 	private static final String ROOT_LABEL = "salvage.root";
 	private static final String LABEL_CONTAINER_TIDE_MAP_PREFIX = "salvage.tide.";
+	
+	/**
+	 * Amount of time we wait after a tide has been executed before we check for new tides. This is to prevent double execution for imprecise clocks.
+	 */
+	private static final int TIDE_CLOCK_WAIT = 5000;
 	
 	private SalvageConfiguration configuration;
 	private final Thread serviceThread = new Thread(this::serviceThreadEntry, "SalvageService");
@@ -84,9 +90,16 @@ public class SalvageService extends AbstractService {
 			
 			configuration = SalvageConfiguration.fromContainerInspect(ownContainer);
 			
-			// ensure we have all images specified by cranes
+			// ensure we have all images specified by cranes);
 			for (var crane : configuration.cranes().values()) {
-				verifyCraneImage(docker, crane);
+				try {
+					verifyCraneImage(docker, crane);
+				} catch (ImagePullFailedException e) {
+					if (e.isPresent())
+						log.warn("failed to check for crane '{}' image '{}', but old image is still present", crane.name(), crane.image(), e);
+					else
+						log.warn("failed to pull for crane '{}' image '{}', no existing image present, good luck", crane.name(), crane.image(), e);
+				}
 			}
 		} catch (Throwable e) {
 			notifyFailed(e);
@@ -97,32 +110,28 @@ public class SalvageService extends AbstractService {
 		loop();
 	}
 	
-	private void verifyCraneImage(DockerClient docker, SalvageCrane crane) throws InterruptedException {
-		boolean requirePull = false;
+	private void verifyCraneImage(DockerClient docker, SalvageCrane crane) throws InterruptedException, ImagePullFailedException {
 		
-		if (crane.pullOnRun()) {
-			requirePull = true;
-			log.info("pull on run required for crane '{}'", crane.name());
-		} else {
-			try {
-				var image = docker.inspectImageCmd(crane.image()).exec();
-				log.trace("found the following image for crane {}: {} (no pull required)", crane.name(), image.getRepoTags());
-			} catch (NotFoundException e) {
-				log.info("missing image for crane '{}', requesting pull", crane.name());
-				requirePull = true;
-			}
-		}
-		
-		if (!requirePull) {
-			return;
-		}
-		
-		log.info("fetching : '{}' for crane '{}', pulling it now", crane.image(), crane.name());
-		var callback = docker.pullImageCmd(crane.image()).exec(new PullImageResultCallback());
+		// check if image is already present
+		boolean isPresent;
 		try {
-			callback.awaitCompletion();
-		} catch (NotFoundException e) {
-			throw new IllegalStateException("failed to pull image '" + crane.image() + "' for crane '" + crane.name() + "'", e);
+			var image = docker.inspectImageCmd(crane.image()).exec();
+			isPresent = true;
+		} catch (NotFoundException ignore) {
+			isPresent = false;
+		}
+		
+		if (!isPresent || crane.pullOnRun()) {
+			
+			log.info("fetching : '{}' for crane '{}' (isPresent: {}, pullOnRun: {})", crane.image(), crane.name(), isPresent, crane.pullOnRun());
+			try {
+				var callback = docker.pullImageCmd(crane.image()).exec(new PullImageResultCallback());
+				callback.awaitCompletion();
+			} catch (InterruptedException e) {
+				throw e;
+			} catch (Exception e) {
+				throw new ImagePullFailedException(e, isPresent);
+			}
 		}
 	}
 	
@@ -152,7 +161,7 @@ public class SalvageService extends AbstractService {
 			log.info("waiting for next tide '{}' in '{}'", tide.name(), SalvageMain.formatDuration(duration));
 			try {
 				// to prevent double execution, we add 5 seconds to the duration
-				Thread.sleep(Math.max(duration.toMillis(), 0) + 5000);
+				Thread.sleep(Math.max(duration.toMillis(), 0) + TIDE_CLOCK_WAIT);
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 				continue;
@@ -205,8 +214,17 @@ public class SalvageService extends AbstractService {
 		try (var docker = createDefaultClient()) {
 			docker.pingCmd().exec();
 			
-			// user might have run system prune, so recheck if cranes are still there
-			verifyCraneImage(docker, tide.crane());
+			try {
+				// crane might have new image or user purged existing image, so we check again
+				verifyCraneImage(docker, tide.crane());
+			} catch (ImagePullFailedException e) {
+				if (e.isPresent()) {
+					tideLog.failure("failed to pull crane '%s' image '%s' but local image is still present".formatted(tide.crane().name(), tide.crane().image()));
+				} else {
+					tideLog.failure("failed to pull crane '%s' image '%s' no local image available".formatted(tide.crane().name(), tide.crane().image()));
+					return;
+				}
+			}
 			
 			// identifying volumes of tide is rather complicated and involes different logic, depending on wether the volume is part of a project or not
 			var volumes = getVolumeNamesForTide(docker, tide);
@@ -225,7 +243,7 @@ public class SalvageService extends AbstractService {
 					.map(c -> SalvageContainer.fromContainer(c, volumes))
 					.collect(Collectors.toList());
 			
-			// remove ourselves, since we never want to touch our own container (only happens if user is actually stupid)
+			// remove ourselves, since we never want to touch our own container
 			containers.removeIf(c -> c.id().equals(ownContainerId));
 			
 			log.info("found {} containers depending on tide '{}'", containers.size(), tide.name());
@@ -270,7 +288,9 @@ public class SalvageService extends AbstractService {
 			}
 		}
 		
-		tideLog.success();
+		// if crane image lookup failed earlier, we don't want to report success
+		if (tideLog.tideResult().state() != FinishState.FAILURE)
+			tideLog.success();
 	}
 	
 	private static void doTideReporting(TideLog tideLog, CaptainHook hook) {
@@ -458,4 +478,14 @@ public class SalvageService extends AbstractService {
 	}
 	
 	private record NextTideExecution(SalvageTide tide, ZonedDateTime time) {}
+	
+	private static final class ImagePullFailedException extends Exception {
+		
+		@Getter private final boolean isPresent;
+		
+		private ImagePullFailedException(Throwable cause, boolean isPresent) {
+			super(cause);
+			this.isPresent = isPresent;
+		}
+	}
 }

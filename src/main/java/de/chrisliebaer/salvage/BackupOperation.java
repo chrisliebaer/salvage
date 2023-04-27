@@ -110,7 +110,7 @@ public class BackupOperation implements AutoCloseable {
 					try {
 						lock.wait();
 					} catch (InterruptedException ignore) {
-						// set interrupt flag and exit loop, this will cause, remaining volumes to be skipped and trigger cancel logic in waiting loop
+						// set interrupt flag and exit loop, this will cause remaining volumes to be skipped and trigger cancel logic in waiting loop
 						Thread.currentThread().interrupt();
 						break;
 					}
