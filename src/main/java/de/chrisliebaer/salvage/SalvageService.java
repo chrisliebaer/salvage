@@ -98,16 +98,26 @@ public class SalvageService extends AbstractService {
 	}
 	
 	private void verifyCraneImage(DockerClient docker, SalvageCrane crane) throws InterruptedException {
-		try {
-			var image = docker.inspectImageCmd(crane.image()).exec();
-			log.trace("found the following image for crane {}: {}", crane.name(), image.getRepoTags());
-			
-			// if crane does not require pull, we are done, otherwise we need to check if image is up-to-date
-			if (!crane.pullOnRun())
-				return;
-		} catch (NotFoundException ignore) {}
+		boolean requirePull = false;
 		
-		log.info("missing image or pull on run required: '{}' for crane '{}', pulling it now", crane.image(), crane.name());
+		if (crane.pullOnRun()) {
+			requirePull = true;
+			log.info("pull on run required for crane '{}'", crane.name());
+		} else {
+			try {
+				var image = docker.inspectImageCmd(crane.image()).exec();
+				log.trace("found the following image for crane {}: {} (no pull required)", crane.name(), image.getRepoTags());
+			} catch (NotFoundException e) {
+				log.info("missing image for crane '{}', requesting pull", crane.name());
+				requirePull = true;
+			}
+		}
+		
+		if (!requirePull) {
+			return;
+		}
+		
+		log.info("fetching : '{}' for crane '{}', pulling it now", crane.image(), crane.name());
 		var callback = docker.pullImageCmd(crane.image()).exec(new PullImageResultCallback());
 		try {
 			callback.awaitCompletion();
