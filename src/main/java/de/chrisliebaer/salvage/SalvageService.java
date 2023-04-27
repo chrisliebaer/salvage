@@ -90,7 +90,7 @@ public class SalvageService extends AbstractService {
 			
 			configuration = SalvageConfiguration.fromContainerInspect(ownContainer);
 			
-			// ensure we have all images specified by cranes);
+			// ensure we have all images specified by cranes
 			for (var crane : configuration.cranes().values()) {
 				try {
 					verifyCraneImage(docker, crane);
