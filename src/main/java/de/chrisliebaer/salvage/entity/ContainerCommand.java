@@ -44,8 +44,6 @@ public record ContainerCommand(List<String> command, String user) {
 		var exitCode = execInspect.getExitCodeLong();
 		if (exitCode == null)
 			throw new IllegalStateException("execution of command in container " + container.name() + " failed");
-		if (exitCode != 0)
-			log.warn("execution of command in container {} failed with exit code {}", container.name(), exitCode);
 		
 		return exitCode;
 	}

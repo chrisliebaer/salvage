@@ -76,10 +76,17 @@ public class StateTransaction implements AutoCloseable {
 		if (container.commandPre().isPresent() && state.getRunning() && !state.getPaused()) {
 			var command = container.commandPre().get();
 			log.debug("running preperation command '{}' on container {}", command, container.name());
+			long exitCode;
 			try {
-				command.run(docker, container);
+				exitCode = command.run(docker, container);
 			} catch (Throwable e) {
 				throw new IllegalStateException("preperation command '" + command + "' failed on container '" + container.name() + "'", e);
+			}
+			
+			if (container.exitCodeBehaviour().check(exitCode)) {
+				log.debug("preperation command '{}' on container {} exited with code {}", command, container.name(), exitCode);
+			} else {
+				throw new IllegalStateException("preperation command '" + command + "' on container '" + container.name() + "' exited with code " + exitCode);
 			}
 			
 			preCommandRun = true;
@@ -133,7 +140,13 @@ public class StateTransaction implements AutoCloseable {
 		if (affected.preCommandRun() && container.commandPost().isPresent()) {
 			var command = container.commandPost().get();
 			log.debug("running post command '{}' on container {}", command, container.name());
-			command.run(docker, container);
+			var exitCode = command.run(docker, container);
+			if (container.exitCodeBehaviour().check(exitCode)) {
+				log.debug("post command '{}' on container {} exited with code {}", command, container.name(), exitCode);
+			} else {
+				throw new IllegalStateException("post command '" + command + "' on container '" + container.name() + "' exited with code " + exitCode);
+				
+			}
 		}
 	}
 	

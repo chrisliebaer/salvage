@@ -10,10 +10,12 @@ import java.util.Map;
 import java.util.Optional;
 
 public record SalvageContainer(String id, String name, Optional<String> project, List<SalvageVolume> volumes,
-							   ContainerAction action, Optional<ContainerCommand> commandPre, Optional<ContainerCommand> commandPost) {
+							   ContainerAction action, Optional<ContainerCommand> commandPre, Optional<ContainerCommand> commandPost,
+							   ExitCodeBehaviour exitCodeBehaviour) {
 	
 	private static final String LABEL_CONTAINER_ACTION = "salvage.action";
 	
+	private static final String LABEL_CONTAINER_COMMAND_EXIT_CODE = "salvage.command.exitcode";
 	private static final String LABEL_CONTAINER_COMMAND_USER = "salvage.command.user";
 	private static final String LABEL_CONTAINER_COMMAND_PRE = "salvage.command.pre";
 	private static final String LABEL_CONTAINER_COMMAND_POST = "salvage.command.post";
@@ -47,6 +49,7 @@ public record SalvageContainer(String id, String name, Optional<String> project,
 		}
 	}
 	
+	
 	public static SalvageContainer fromContainer(InspectContainerResponse container, Map<String, SalvageVolume> volumes) {
 		var usedVolumes = new ArrayList<SalvageVolume>();
 		var labels = container.getConfig().getLabels();
@@ -63,6 +66,10 @@ public record SalvageContainer(String id, String name, Optional<String> project,
 		var postCommand = Optional.ofNullable(labels.get(LABEL_CONTAINER_COMMAND_POST))
 				.map(s -> new ContainerCommand(List.of(translateCommandline(s)), user));
 		
+		// parse exit code behaviour, if present
+		var exitCodeBehaviour = Optional.ofNullable(labels.get(LABEL_CONTAINER_COMMAND_EXIT_CODE))
+				.map(ExitCodeBehaviour::fromString).orElse(new ExitCodeBehaviour.FailIfNonZero());
+		
 		// set default action depending on whether pre- or post-commands are present
 		var action = preCommand.isPresent() || postCommand.isPresent() ? ContainerAction.IGNORE : ContainerAction.STOP;
 		
@@ -76,7 +83,7 @@ public record SalvageContainer(String id, String name, Optional<String> project,
 				usedVolumes.add(volume);
 		}
 		
-		return new SalvageContainer(container.getId(), container.getName(), project, usedVolumes, action, preCommand, postCommand);
+		return new SalvageContainer(container.getId(), container.getName(), project, usedVolumes, action, preCommand, postCommand, exitCodeBehaviour);
 	}
 	
 	private static String[] translateCommandline(String command) {
