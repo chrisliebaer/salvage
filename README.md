@@ -152,6 +152,10 @@ Certain actions can only be performed on a container if the container is in a ce
 	* `stop`: (Default if no pre- or post-action is set) The container will be stopped before the backup is performed. (Ignored if container is already stopped.)
 	* `pause`: The container will be paused before the backup is performed. (Ignored if container is already paused or stopped.)
 * `salvage.command.pre` and `salvage.command.post`: Commands that will be executed before and after the backup within the container, similar to `docker exec`. Will not be executed if the container is stopped or paused.
+* `salvage.command.exitcode`: Defines how different exit codes should be handled. Possible values are:
+	* `ignore`: The exit code will be ignored.
+	* `stop`: The backup will not be performed. (Default)
+	* `custom`: Special handlingg. Instead of using the `custom` value, you are expected to provide a comma-separated list of exit codes that should be handled as `stop`. You can define ranges or single exit codes. For example `1,3-5,7-9`.
 * `salvage.user`: User that will be used to execute the backup command. (Default is container's user)
 
 # salvage Crane Interface
