@@ -30,7 +30,7 @@ After Salvage has prepared all attached containers for backup, it will instantia
 salvage will wait for the crane to complete the backup before reversing the performed backup actions on all containers, returning everything back to full operation.
 
 Backups are done in `tides`.
-A tide configures when will run.
+A tide configures when it will run.
 The tide also decides which crane will be used by default.
 All containers assigend to a specific tide, will be backed up, when this tide is executed.
 
@@ -128,7 +128,7 @@ By default, Salvage will ignore all volumes it hasn't been explicitly instructed
 In order to configure a volume for backup, you need to label it as such.
 Since changing labels on volumes is not supported by Docker, volumes are configured by attaching labels to containers instead (see FAQ).
 To do this, place the `salvage.tide.<name>=<volume1>,<volume2>,...` label on any container (it doesn't need to actually use the volume).
-This might seem a bit odd, especially since the volume is not actually used by the container, but the process of discovering volumes is decoupled from backup process that controls which containers need to be stopped or paused during backup.
+This might seem a bit odd, especially since the volume is not actually used by the container, but the process of discovering volumes is decoupled from the backup process that controls which containers need to be stopped or paused during backup.
 Although you could attach the label to any container, it is recommended that you attach it to the container that actually uses the volume, for clarity and maintainability.
 
 Salvage offers two ways of resolving the volume name:
