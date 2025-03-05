@@ -15,7 +15,7 @@ on:
       - '*.md'
 
 env:
-  JAVA_VERSION: "17"
+  JAVA_VERSION: "21"
   IMAGE_NAME: "ghcr.io/${{ github.repository }}"
 
 jobs:
