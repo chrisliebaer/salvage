@@ -3,8 +3,8 @@ plugins {
 	application
 	idea
 	id("com.palantir.git-version") version "0.12.3"
-	id("io.freefair.lombok") version "6.3.0"
-	id("com.google.cloud.tools.jib") version "3.2.1"
+	id("io.freefair.lombok") version "8.12.2.1"
+	id("com.google.cloud.tools.jib") version "3.4.4"
 }
 
 idea {
@@ -20,7 +20,7 @@ version = gitVersion()
 
 java {
 	toolchain {
-		languageVersion.set(JavaLanguageVersion.of(17))
+		languageVersion.set(JavaLanguageVersion.of(21))
 	}
 }
 
@@ -30,8 +30,21 @@ application {
 
 jib {
 	val javaVersion = java.toolchain.languageVersion.get().asInt()
-	from.image = "eclipse-temurin:$javaVersion"
+	from {
+		image = "eclipse-temurin:$javaVersion"
+		platforms {
+			platform {
+				architecture = "amd64"
+				os = "linux"
+			}
+			platform {
+				architecture = "arm64"
+				os = "linux"
+			}
+		}
+	}
 }
+
 
 repositories {
 	mavenLocal()
