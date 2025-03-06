@@ -16,7 +16,6 @@ on:
 
 env:
   JAVA_VERSION: "21"
-  IMAGE_NAME: "ghcr.io/${{ github.repository }}"
 
 jobs:
   docker:
@@ -45,9 +44,9 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: crazy-max/ghaction-docker-meta@v4
+        uses: docker/metadata-action@v5
         with:
-          images: "${{ env.IMAGE_NAME }}"
+          images: ""
           sep-tags: ","
           sep-labels: ","
           flavor: |
