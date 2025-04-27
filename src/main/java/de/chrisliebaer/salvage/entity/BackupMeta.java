@@ -2,6 +2,7 @@ package de.chrisliebaer.salvage.entity;
 
 import com.github.dockerjava.api.command.InspectVolumeResponse;
 
+import java.time.Instant;
 import java.util.Map;
 
 /**
@@ -11,8 +12,7 @@ import java.util.Map;
 
 public record BackupMeta(HostMeta hostMeta, VolumeMeta volumeMeta, String crane, String image) {
 	
-	public record HostMeta(long timestamp, String host) {
-	
+	public record HostMeta(long timestamp, Instant executionStart, String host) {
 	}
 	
 	public record VolumeMeta(String name, Map<String, String> labels, String driver, Map<String, String> driverOptions) {

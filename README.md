@@ -95,7 +95,6 @@ A few notes on crane volumes:
 An example excerpt of a salvage container with a crane volume attached might look like this:
 
 ```yaml
-version: '3.9'
 services:
   salvage:
     image: "ghcr.io/chrisliebaer/salvage:master"
@@ -168,6 +167,7 @@ The following environment variables are passed to the crane:
 * `SALVAGE_MACHINE_NAME`: The name of the machine that is backing up, as specified in the daemon configuration.
 * `SALVAGE_CRANE_NAME`: The name of the crane that is performing the backup.
 * `SALVAGE_VOLUME_NAME`: The name of the volume.
+* `SALVAGE_TIDE_TIMESTAMP`: The timestamp of the cron expression that triggered the tide in epoch seconds. The primary use case for this is to rotate backup targets based on the time of the backup deterministically without having to rely on the current time.
 * as well as any additional environment variables specified in the crane configuration.
 
 salvage will mount the volume at `/salvage/volume` (read-only) and include some metadata at `/salvage/meta`.

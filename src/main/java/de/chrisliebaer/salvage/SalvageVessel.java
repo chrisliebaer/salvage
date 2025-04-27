@@ -33,7 +33,7 @@ import java.util.Map;
 public class SalvageVessel {
 	
 	// in seconds!
-	private static final int BACKUP_SHUTDOWN_GRAVE_TIMEOUT = 120;
+	private static final int BACKUP_SHUTDOWN_GRACE_TIMEOUT = 120;
 	
 	private static final int ROOT_UID = 0;
 	private static final int ROOT_GID = 0;
@@ -43,6 +43,7 @@ public class SalvageVessel {
 	private static final String CRANE_ENV_MACHINE_NAME = "SALVAGE_MACHINE_NAME";
 	private static final String CRANE_ENV_CRANE_NAME = "SALVAGE_CRANE_NAME";
 	private static final String CRANE_ENV_VOLUME_NAME = "SALVAGE_VOLUME_NAME";
+	private static final String CRANE_ENV_TIDE_TIMESTAMP = "SALVAGE_TIDE_TIMESTAMP";
 	
 	private static final String FILE_PATH_META = "/salvage/meta/meta.json";
 	private static final String FILE_PATH_VOLUME = "/salvage/volume";
@@ -72,11 +73,13 @@ public class SalvageVessel {
 		env.put(CRANE_ENV_MACHINE_NAME, meta.hostMeta().host());
 		env.put(CRANE_ENV_CRANE_NAME, meta.crane());
 		env.put(CRANE_ENV_VOLUME_NAME, volume.name());
+		//noinspection MagicNumber
+		env.put(CRANE_ENV_TIDE_TIMESTAMP, String.valueOf(meta.hostMeta().executionStart().toEpochMilli() / 1000L));
 		
 		var container = docker.createContainerCmd(crane.image())
 				.withEnv(prepareEnv(env))
 				.withLabels(Map.of(SalvageService.SALVAGE_ENTITY_LABEL, "crane"))
-				.withStopTimeout(BACKUP_SHUTDOWN_GRAVE_TIMEOUT)
+				.withStopTimeout(BACKUP_SHUTDOWN_GRACE_TIMEOUT)
 				.withHostConfig(HostConfig.newHostConfig()
 						// TODO: waiting for container to exit is broken and subject to a race condition, remove autoremove and simply remove container by hand
 						.withAutoRemove(true)
