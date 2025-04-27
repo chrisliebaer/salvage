@@ -151,7 +151,7 @@ public class SalvageService extends AbstractService {
 			tides.sort(Comparator.comparing(NextTideExecution::time));
 			
 			// remove first tide from list (will be added again after execution but with new execution time)
-			var nextExecution = tides.remove(0);
+			var nextExecution = tides.removeFirst();
 			var tide = nextExecution.tide();
 			
 			// sleep for next execution
@@ -168,7 +168,7 @@ public class SalvageService extends AbstractService {
 			}
 			
 			ThreadContext.put("tide", tide.name());
-			tideExceptionWrapped(tide);
+			tideExceptionWrapped(tide, nextExecution.time().toInstant());
 			ThreadContext.remove("tide");
 			
 			// add tide with next execution time to list
@@ -183,15 +183,16 @@ public class SalvageService extends AbstractService {
 	/**
 	 * Wraps tide execution in handler logic for error reporting.
 	 *
-	 * @param tide tide to execute
+	 * @param tide          tide to execute
+	 * @param nextExecution
 	 */
-	private void tideExceptionWrapped(SalvageTide tide) {
+	private void tideExceptionWrapped(SalvageTide tide, Instant nextExecution) {
 		var hook = new WebhookReporter(tide.reportingUrlStore(), configuration.hostname(), httpClient);
 		var tideLog = new TideLog(tide, hook);
 		
 		var start = Instant.now();
 		try {
-			executeTide(tide, tideLog);
+			executeTide(tide, nextExecution, tideLog);
 		} catch (IOException e) {
 			log.error("failed to execute tide '{}'", tide.name(), e);
 			tideLog.failure(e);
@@ -207,7 +208,7 @@ public class SalvageService extends AbstractService {
 		doTideReporting(tideLog, hook);
 	}
 	
-	private void executeTide(SalvageTide tide, TideLog tideLog) throws IOException, InterruptedException {
+	private void executeTide(SalvageTide tide, Instant executionStart, TideLog tideLog) throws IOException, InterruptedException {
 		log.info("executing tide '{}'", tide.name());
 		tideLog.start();
 		
@@ -267,7 +268,7 @@ public class SalvageService extends AbstractService {
 				}
 			}
 			
-			var hostMeta = new BackupMeta.HostMeta(System.currentTimeMillis(), configuration.hostname());
+			var hostMeta = new BackupMeta.HostMeta(System.currentTimeMillis(), executionStart, configuration.hostname());
 			
 			// instance worker pool for backup, which can be reused for all groups
 			try (var operation = new BackupOperation(docker, tide.maxConcurrent(), configuration.cranes().values(), hostMeta, tideLog)) {
@@ -339,7 +340,7 @@ public class SalvageService extends AbstractService {
 		
 		var containers = group.containers();
 		
-		// if an error occurs during preperation we can simply abort the whole backup
+		// if an error occurs during preparation, we can simply abort the whole backup
 		try {
 			for (var container : containers) {
 				ThreadContext.put("container", container.name());
@@ -443,7 +444,7 @@ public class SalvageService extends AbstractService {
 						throw new IllegalArgumentException("expected exactly one volume in project '" + project + "' named '" + volumeName + "' but found " + volumes.size());
 					}
 					
-					volume = volumes.get(0);
+					volume = volumes.getFirst();
 				}
 				
 				log.trace("successfully identified volume '{}' as docker volume '{}'", volumeName, volume.getName());
@@ -474,7 +475,7 @@ public class SalvageService extends AbstractService {
 		if (containers.size() > 1)
 			throw new IllegalStateException("multiple containers with label '" + ROOT_LABEL + "' found, check if older containers exist");
 		
-		return containers.get(0).getId();
+		return containers.getFirst().getId();
 	}
 	
 	private record NextTideExecution(SalvageTide tide, ZonedDateTime time) {}
