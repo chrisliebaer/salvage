@@ -74,7 +74,7 @@ public class SalvageVessel {
 		env.put(CRANE_ENV_CRANE_NAME, meta.crane());
 		env.put(CRANE_ENV_VOLUME_NAME, volume.name());
 		//noinspection MagicNumber
-		env.put(CRANE_ENV_TIDE_TIMESTAMP, String.valueOf(meta.hostMeta().executionStart().toEpochMilli() / 1000L));
+		env.put(CRANE_ENV_TIDE_TIMESTAMP, String.valueOf(meta.hostMeta().executionStart() / 1000L));
 		
 		var container = docker.createContainerCmd(crane.image())
 				.withEnv(prepareEnv(env))
