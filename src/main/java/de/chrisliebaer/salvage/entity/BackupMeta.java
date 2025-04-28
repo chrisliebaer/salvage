@@ -2,7 +2,6 @@ package de.chrisliebaer.salvage.entity;
 
 import com.github.dockerjava.api.command.InspectVolumeResponse;
 
-import java.time.Instant;
 import java.util.Map;
 
 /**
@@ -12,7 +11,14 @@ import java.util.Map;
 
 public record BackupMeta(HostMeta hostMeta, VolumeMeta volumeMeta, String crane, String image) {
 	
-	public record HostMeta(long timestamp, Instant executionStart, String host) {
+	/**
+	 * Represents metadata about the host where the backup is executed.
+	 *
+	 * @param timestamp       The timestamp when the meta was created in seconds since epoch.
+	 * @param executionStart  The start time of the entire tide in seconds since epoch. This will always be before the {@code timestamp}.
+	 * @param host            The name or identifier of the host machine.
+	 */
+	public record HostMeta(long timestamp, long executionStart, String host) {
 	}
 	
 	public record VolumeMeta(String name, Map<String, String> labels, String driver, Map<String, String> driverOptions) {

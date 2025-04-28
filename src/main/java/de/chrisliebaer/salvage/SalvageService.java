@@ -268,7 +268,7 @@ public class SalvageService extends AbstractService {
 				}
 			}
 			
-			var hostMeta = new BackupMeta.HostMeta(System.currentTimeMillis(), executionStart, configuration.hostname());
+			var hostMeta = new BackupMeta.HostMeta(System.currentTimeMillis(), executionStart.toEpochMilli(), configuration.hostname());
 			
 			// instance worker pool for backup, which can be reused for all groups
 			try (var operation = new BackupOperation(docker, tide.maxConcurrent(), configuration.cranes().values(), hostMeta, tideLog)) {
