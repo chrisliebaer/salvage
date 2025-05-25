@@ -32,7 +32,7 @@ Salvage will wait for the crane to complete the backup before reversing the perf
 Backups are done in `tides`.
 A tide configures when it will run.
 The tide also decides which crane will be used by default.
-All containers assigend to a specific tide, will be backed up, when this tide is executed.
+All containers assigned to a specific tide, will be backed up, when this tide is executed.
 
 This design allows you to back up volumes with most file-based backup solutions while ensuring that these solutions don't need to interface directly with Docker.
 So, let salvage be your first mate in ensuring the safety of your Docker applications!
@@ -154,7 +154,7 @@ Certain actions can only be performed on a container if the container is in a ce
 * `salvage.command.exitcode`: Defines how different exit codes should be handled. Possible values are:
 	* `ignore`: The exit code will be ignored.
 	* `stop`: The backup will not be performed. (Default)
-	* `custom`: Special handlingg. Instead of using the `custom` value, you are expected to provide a comma-separated list of exit codes that should be handled as `stop`. You can define ranges or single exit codes. For example `1,3-5,7-9`.
+	* `custom`: Special handling. Instead of using the `custom` value, you are expected to provide a comma-separated list of exit codes that should be handled as `stop`. You can define ranges or single exit codes. For example `1,3-5,7-9`.
 * `salvage.user`: User that will be used to execute the backup command. (Default is container's user)
 
 # Salvage crane interface
