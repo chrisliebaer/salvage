@@ -12,7 +12,7 @@ Additionally, there are currently no other crane implementations available other
 </p>
 
 
-salvage is my solution for backing up small scale Docker applications.
+Salvage is my solution for backing up small scale Docker applications.
 Or more specifically: **my** Docker infrastructure.
 As with most things Docker related, the puns are important.
 So I anchored on `salvage`.
@@ -20,26 +20,26 @@ If you are interested in using salvage or how to use it, weigh anchor and set sa
 
 # Overview
 
-salvage is designed to identify all volumes on the current Docker instance that need to be backed up.
+Salvage is designed to identify all volumes on the current Docker instance that need to be backed up.
 It accomplishes this by first identifying all containers attached to each volume and then performing their configured backup action to prepare the volume for backup, ensuring data consistency.
 
-While Salvage takes care of orchestrating all backups, it does not actually back up any data itself.
+While salvage takes care of orchestrating all backups, it does not actually back up any data itself.
 Instead, it delegates this job to `cranes`.
 A crane is a Docker image that implements the salvage crane interface.
-After Salvage has prepared all attached containers for backup, it will instantiate a crane to perform the actual backup.
-salvage will wait for the crane to complete the backup before reversing the performed backup actions on all containers, returning everything back to full operation.
+After salvage has prepared all attached containers for backup, it will instantiate a crane to perform the actual backup.
+Salvage will wait for the crane to complete the backup before reversing the performed backup actions on all containers, returning everything back to full operation.
 
 Backups are done in `tides`.
-A tide configures when will run.
+A tide configures when it will run.
 The tide also decides which crane will be used by default.
-All containers assigend to a specific tide, will be backed up, when this tide is executed.
+All containers assigned to a specific tide, will be backed up, when this tide is executed.
 
 This design allows you to back up volumes with most file-based backup solutions while ensuring that these solutions don't need to interface directly with Docker.
-So, let Salvage be your first mate in ensuring the safety of your Docker applications!
+So, let salvage be your first mate in ensuring the safety of your Docker applications!
 
 # Configuration
 
-salvage is supposed to retrieve individual backup definitions by checking for certain labels on each volume but requires a global configuration to configure the backup infrastructure itself.
+Salvage is supposed to retrieve individual backup definitions by checking for certain labels on each volume but requires a global configuration to configure the backup infrastructure itself.
 
 ## Daemon configuration
 
@@ -55,10 +55,10 @@ Additionally, you must set the following label on the Salvage container for it t
 ### Tide configuration
 
 A tide is a schedule that specifies a set of volumes to be backed up at the same time.
-By hooking volumes into a tide, they will be backed up according to the Tide's schedule.
-Each Tide can also specify a grouping strategy that determines how much downtime is expected for the backup.
+By hooking volumes into a tide, they will be backed up according to the tide's schedule.
+Each tide can also specify a grouping strategy that determines how much downtime is expected for the backup.
 
-The following labels are used to configure a Tide, and they need to be present on the Salvage container:
+The following labels are used to configure a tide, and they need to be present on the Salvage container:
 
 * `salvage.tides.<name>.cron`: Cron expression specifying when the tide should be executed.
 * `salvage.tides.<name>.grouping`: The grouping strategy to use for this tide. Possible values are:
@@ -70,7 +70,7 @@ The following labels are used to configure a Tide, and they need to be present o
 
 ### Crane configuration
 
-A crane is an image that implements the salvage Crane interface.
+A crane is an image that implements the salvage crane interface.
 The only cranes currently available are the ones that I'm using for myself.
 But since salvage does most of the heavy lifting, writing a crane for your backup software of choice should be simple.
 
@@ -124,11 +124,11 @@ volumes:
 
 ### Volume configuration
 
-By default, Salvage will ignore all volumes it hasn't been explicitly instructed to back up.
+By default, salvage will ignore all volumes it hasn't been explicitly instructed to back up.
 In order to configure a volume for backup, you need to label it as such.
 Since changing labels on volumes is not supported by Docker, volumes are configured by attaching labels to containers instead (see FAQ).
 To do this, place the `salvage.tide.<name>=<volume1>,<volume2>,...` label on any container (it doesn't need to actually use the volume).
-This might seem a bit odd, especially since the volume is not actually used by the container, but the process of discovering volumes is decoupled from backup process that controls which containers need to be stopped or paused during backup.
+This might seem a bit odd, especially since the volume is not actually used by the container, but the process of discovering volumes is decoupled from the backup process that controls which containers need to be stopped or paused during backup.
 Although you could attach the label to any container, it is recommended that you attach it to the container that actually uses the volume, for clarity and maintainability.
 
 Salvage offers two ways of resolving the volume name:
@@ -154,13 +154,13 @@ Certain actions can only be performed on a container if the container is in a ce
 * `salvage.command.exitcode`: Defines how different exit codes should be handled. Possible values are:
 	* `ignore`: The exit code will be ignored.
 	* `stop`: The backup will not be performed. (Default)
-	* `custom`: Special handlingg. Instead of using the `custom` value, you are expected to provide a comma-separated list of exit codes that should be handled as `stop`. You can define ranges or single exit codes. For example `1,3-5,7-9`.
+	* `custom`: Special handling. Instead of using the `custom` value, you are expected to provide a comma-separated list of exit codes that should be handled as `stop`. You can define ranges or single exit codes. For example `1,3-5,7-9`.
 * `salvage.user`: User that will be used to execute the backup command. (Default is container's user)
 
-# salvage Crane Interface
+# Salvage crane interface
 
-cranes are implemented using Docker images.
-salvage will pull the crane image, create a container from it, and prepare the backup environment.
+Cranes are implemented using Docker images.
+Salvage will pull the crane image, create a container from it, and prepare the backup environment.
 
 The following environment variables are passed to the crane:
 
@@ -170,7 +170,7 @@ The following environment variables are passed to the crane:
 * `SALVAGE_TIDE_TIMESTAMP`: The timestamp of the cron expression that triggered the tide in epoch seconds. The primary use case for this is to rotate backup targets based on the time of the backup deterministically without having to rely on the current time.
 * as well as any additional environment variables specified in the crane configuration.
 
-salvage will mount the volume at `/salvage/volume` (read-only) and include some metadata at `/salvage/meta`.
+Salvage will mount the volume at `/salvage/volume` (read-only) and include some metadata at `/salvage/meta`.
 The crane is expected to back up and restore both of these directories.
 **All cranes are required to contain the `/salvage/volume` and `/salvage/meta` directories in their image as otherwise volume access will fail in certain SELinux environments.**
 The content within the `/salvage/meta` directory is not part of the crane interface, and may change at any time.
@@ -252,7 +252,7 @@ docker run --rm -v VOLUMENAME:/mnt alpine touch /mnt/.salvage_workaround
 
 # Contributing
 
-salvage is designed to work with external crane images, and contributions in the form of new crane images are always welcome.
+Salvage is designed to work with external crane images, and contributions in the form of new crane images are always welcome.
 
 If you wish to contribute to salvage itself, please open an issue first to discuss the feature you wish to add or the bug you want to fix.
 I build salvage to solve a very specific problem and would like to keep the scope small.
