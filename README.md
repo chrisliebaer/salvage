@@ -3,7 +3,7 @@
 Salvage is currently being used in production, and no major issues have been reported except for those listed in the open issues section.
 Please note that some configurations may not have been fully tested yet and there might be undiscovered bugs that could potentially cause catastrophic failures.
 
-It's worth noting that Salvage does not issue any volume deletion commands and will mount all backup volumes as read-only, so data loss is extremly unlikely.
+It's worth noting that Salvage does not issue any volume deletion commands and will mount all backup volumes as read-only, so data loss is extremely unlikely.
 
 Additionally, there are currently no other crane implementations available other than the one used for the author's own infrastructure, which can be found in the "Crane" section below.
 
