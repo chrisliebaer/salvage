@@ -2,9 +2,9 @@ plugins {
 	java
 	application
 	idea
-	id("com.palantir.git-version") version "0.12.3"
-	id("io.freefair.lombok") version "8.12.2.1"
-	id("com.google.cloud.tools.jib") version "3.4.4"
+	id("com.palantir.git-version") version "4.2.0"
+	id("io.freefair.lombok") version "9.1.0"
+	id("com.google.cloud.tools.jib") version "3.5.2"
 }
 
 idea {
@@ -54,8 +54,8 @@ repositories {
 
 dependencies {
 	
-	implementation("com.google.guava:guava:31.1-jre")
-	implementation("org.apache.commons:commons-text:1.10.0")
+	implementation("com.google.guava:guava:33.5.0-jre")
+	implementation("org.apache.commons:commons-text:1.15.0")
 	
 	val log4j2 = "2.17.2"
 	implementation("org.apache.logging.log4j:log4j-api:$log4j2")
@@ -63,19 +63,19 @@ dependencies {
 	implementation("org.apache.logging.log4j:log4j-slf4j-impl:$log4j2")
 	
 	// for interacting with docker daemon
-	val docker = "3.2.13"
+	val docker = "3.7.0"
 	implementation("com.github.docker-java:docker-java:$docker")
 	implementation("com.github.docker-java:docker-java-transport-httpclient5:$docker")
 	
 	// for parsing cron schedule
-	implementation("com.cronutils:cron-utils:9.1.6")
+	implementation("com.cronutils:cron-utils:9.2.1")
 	
 	// for paring command line arguments
-	implementation("org.codehaus.plexus:plexus-utils:3.4.2")
+	implementation("org.codehaus.plexus:plexus-utils:4.0.2")
 	
 	// for creating tar archive for uploading files to docker daemon
-	implementation("org.apache.commons:commons-compress:1.21")
-	implementation("com.google.code.gson:gson:2.9.0")
+	implementation("org.apache.commons:commons-compress:1.28.0")
+	implementation("com.google.code.gson:gson:2.13.2")
 }
 
 // set encoding for all compilation passes
